@@ -112,8 +112,12 @@ player-select/
   per-request connection. `PRAGMA busy_timeout=5000`.
 - Migrations run at start-up: `migrations/NNN_*.sql` applied in order inside a transaction, tracked
   in `schema_version`.
-- Persons are seeded from `--persons` (JSON list of `{name, color}`) on start-up: inserted if missing
-  by name, never deleted. Names and colors are personal data and are not committed.
+- Persons are seeded from `--persons` (JSON list of `{name, color}`) on start-up. (amended 2026-11-08)
+  The file is the source: names are matched exactly; new names are inserted; names in the file get its
+  `color` and `sort` (= list index); a person not in the file is deleted only if they have no
+  `play_state` and no `up_next_order` rows (and no `account`), otherwise kept and sorted after the
+  file's names. One log line per person kept or removed; no data is ever lost. An absent file changes
+  nothing. Names and colors are personal data and are not committed.
 
 ## 5. Data model
 

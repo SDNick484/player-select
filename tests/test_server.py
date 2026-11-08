@@ -308,6 +308,19 @@ class TestLifecycle(unittest.TestCase):
         finally:
             s.cleanup()
 
+    def test_persons_file_edit_applies_on_restart(self):
+        s = Server(persons=[{"name": "Player 1", "color": "#4c78a8"}]).start()
+        try:
+            self.assertEqual([p["name"] for p in s.get("/api/catalog").json()["persons"]], ["Player 1"])
+            s.stop()
+            s.persons_file.write_text(json.dumps(PERSONS), encoding="utf-8")
+            s.start()
+            got = [(p["name"], p["color"]) for p in s.get("/api/catalog").json()["persons"]]
+            self.assertEqual(got, [(p["name"], p["color"]) for p in PERSONS])
+            self.assertIn("persons: removed 'Player 1'", s.log_text())
+        finally:
+            s.cleanup()
+
     def test_data_dir_modes(self):
         with Server() as s:
             self.assertEqual((s.data / "imports").stat().st_mode & 0o777, 0o700)

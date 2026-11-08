@@ -74,11 +74,12 @@ for d in ps migrations data_static; do
 done
 
 # The person seed. Written once and never overwritten; the owner edits it (names and colors are personal data).
+# The server follows the file on every start, so replacing the placeholder name removes "Player 1" from the picker.
 if [ ! -f "$PERSONS" ]; then
   umask 077
   printf '[{"name": "Player 1", "color": "#4c78a8"}]\n' > "$PERSONS"
   umask 022
-  echo "Wrote $PERSONS (edit it, then: rc-service player-select restart)"
+  echo "Wrote $PERSONS with a placeholder person (replace it with your names, then: rc-service player-select restart)"
 fi
 chown -R "$APP_USER:$APP_USER" "$HOME_DIR"
 chown -R root:root "$PREFIX"

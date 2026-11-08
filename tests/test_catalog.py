@@ -124,15 +124,61 @@ class CatalogReadTest(CatBase):
 
 
 class PersonsTest(CatBase):
-    def test_seed_persons_idempotent_never_deletes(self):
+    """Owner decision 2026-11-08: persons.json is the source; a dropped person with data is kept."""
+
+    def seed(self, persons):
         with self.store.write() as c:
-            seed_persons(c, PERSONS)
-        self.assertEqual(self.q("SELECT COUNT(*) FROM person")[0][0], 2)
+            return seed_persons(c, persons)
+
+    def rows(self):
+        return [tuple(r) for r in self.q("SELECT name, color, sort FROM person ORDER BY sort, id")]
+
+    def test_seed_persons_idempotent(self):
+        self.assertEqual(self.seed(PERSONS), [])
+        self.assertEqual(self.rows(), [("Player A", "#111111", 0), ("Player B", "#222222", 1)])
+
+    def test_placeholder_replaced_by_real_names_is_removed(self):
+        self.seed([{"name": "Player 1", "color": "#4c78a8"}])
+        self.assertEqual(self.rows(), [("Player 1", "#4c78a8", 0)])
+        log = self.seed(PERSONS + [{"name": "Player C", "color": "#333333"}])
+        self.assertEqual(self.rows(), [("Player A", "#111111", 0), ("Player B", "#222222", 1),
+                                       ("Player C", "#333333", 2)])
+        self.assertEqual(log, ["persons: removed 'Player 1' (not in the persons file, no play state)"])
+
+    def test_dropped_person_with_play_state_is_kept_and_logged(self):
+        self.play(self.b, self.works["Bloodborne"], "finished")
+        log = self.seed([{"name": "Player A", "color": "#111111"}])
+        self.assertEqual(self.rows(), [("Player A", "#111111", 0), ("Player B", "#222222", 1)])
+        self.assertEqual(log, ["persons: kept 'Player B' (not in the persons file, but has play state)"])
+        self.assertEqual(self.q("SELECT COUNT(*) FROM play_state WHERE person_id=?", self.b)[0][0], 1)
+
+    def test_dropped_person_with_only_up_next_rows_is_kept(self):
         with self.store.write() as c:
-            seed_persons(c, [{"name": "Player A", "color": "#999999"}])
-        rows = self.q("SELECT name, color, sort FROM person ORDER BY sort")
-        self.assertEqual([tuple(r) for r in rows],
-                         [("Player A", "#111111", 0), ("Player B", "#222222", 1)])
+            c.execute("INSERT INTO up_next_order (person_id, work_id, position) VALUES (?, ?, 0)",
+                      (self.b, self.works["Bloodborne"]))
+        log = self.seed([{"name": "Player A", "color": "#111111"}])
+        self.assertIn(("Player B", "#222222", 1), self.rows())
+        self.assertEqual(len(log), 1)
+
+    def test_dropped_person_with_an_account_is_kept(self):
+        with self.store.write() as c:
+            c.execute("INSERT INTO account (family, person_id, label) VALUES ('steam', ?, 'test')", (self.b,))
+        log = self.seed([{"name": "Player A", "color": "#111111"}])
+        self.assertIn(("Player B", "#222222", 1), self.rows())
+        self.assertEqual(log, ["persons: kept 'Player B' (not in the persons file, but has accounts)"])
+
+    def test_color_and_order_changes_apply(self):
+        log = self.seed([{"name": "Player B", "color": "#bbbbbb"}, {"name": "Player A"}])
+        self.assertEqual(log, [])
+        self.assertEqual(self.rows(), [("Player B", "#bbbbbb", 0), ("Player A", None, 1)])
+        with self.store.read() as c:
+            ids = [r[0] for r in c.execute("SELECT id FROM person ORDER BY sort")]
+        self.assertEqual(ids, [self.b, self.a], "ids are kept: play state stays attached")
+
+    def test_kept_person_sorts_after_the_file(self):
+        self.play(self.a, self.works["Bloodborne"], "finished")
+        self.seed([{"name": "Player B", "color": "#222222"}, {"name": "Player C"}])
+        self.assertEqual([r[0] for r in self.rows()], ["Player B", "Player C", "Player A"])
 
     def test_seed_persons_adds_with_sort(self):
         with self.store.write() as c:

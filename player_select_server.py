@@ -444,7 +444,8 @@ def main() -> None:
     maps = idmaps.load()
     with store.write() as c:
         idmaps.sync_platforms(c, maps)
-        seed_persons(c, persons)
+        for line in seed_persons(c, persons):
+            print(line, file=sys.stderr, flush=True)
     app = App(args.page, args.data, nav, store, maps)
     srv = ThreadingHTTPServer((args.bind, args.port), make_handler(app))
     print(f"Player Select on http://{args.bind}:{args.port}/ (data in {args.data})", file=sys.stderr, flush=True)

@@ -85,7 +85,7 @@ vim /home/games/persons.json
 rc-service player-select restart
 ```
 
-On start-up, names that are not in the database yet are added. Names are never deleted, so removing one from the file does not remove the person. The server exits with an error if the file is unreadable or is not a list of objects like the above, and starts with the persons already in the database if the file does not exist. Names and colors are personal data, so the file is not in the repository (and `.gitignore` lists it).
+The file is the source: on every start-up, names that are not in the database yet are added, and names in the file get the file's color and position (the picker follows the file's order). A person who is no longer in the file is removed only if they have no play state and no Up next entries, so replacing the installer's placeholder `Player 1` with your own names removes it. A person with play state is kept (after the file's names) and nothing of theirs is lost; the log says so, one line per person kept or removed (`persons: kept 'Player 2' ...`). Renaming someone in the file therefore adds a new person; the old name stays while it has play state. The server exits with an error if the file is unreadable or is not a list of objects like the above, and starts with the persons already in the database if the file does not exist. Names and colors are personal data, so the file is not in the repository (and `.gitignore` lists it).
 
 ## Running without the installer
 
