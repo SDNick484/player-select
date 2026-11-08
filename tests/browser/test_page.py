@@ -146,6 +146,25 @@ class PageSmoke(BrowserCase):
         self.assertEqual(page.input_value(f'select.status[data-work="{dk}"]'), "playing")
         self.assert_clean(allow=("HTTP 412", CHROME_HTTP_ERROR))
 
+    def test_status_select_keeps_keyboard_focus_after_saving(self):
+        self.serve()
+        cat = self.catalog()
+        bb = work_id(cat, "Bloodborne")
+        a = cat["persons"][0]["id"]
+        page = self.open(self.context(), "/games")
+        sel = f'select.status[data-work="{bb}"]'
+        page.focus(sel)
+        with page.expect_response(lambda r: r.url.endswith("/api/play-state")) as resp:
+            page.keyboard.press("ArrowDown")
+        self.assertEqual(resp.value.status, 200)
+        page.wait_for_function("document.querySelector('select.status[data-work=\"%d\"]').dataset.saved === '1'" % bb)
+        self.assertEqual(page.evaluate("[document.activeElement.className, document.activeElement.dataset.work]"),
+                         ["status", str(bb)])
+        self.assertEqual(page.input_value(sel), "backlog")
+        self.assertEqual([(s["person"], s["work"], s["status"]) for s in self.catalog()["play_state"]],
+                         [(a, bb, "backlog")])
+        self.assert_clean()
+
     def test_save_error_is_shown_inline(self):
         self.serve()
         cat = self.catalog()

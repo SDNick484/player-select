@@ -134,6 +134,50 @@ class Filters(BrowserCase):
         self.check("st=none", lambda c: c["work_id"] is not None and c["work_id"] != dk)
         self.check("st=none&st=playing", lambda c: c["work_id"] is not None)
 
+    # The focused element's tag and identifying data attributes (data-fam is only a colour marker).
+    ACTIVE = ("(() => { const e = document.activeElement; const d = {...e.dataset}; delete d.fam;"
+              " return [e.tagName, d]; })()")
+
+    def test_keyboard_focus_survives_a_filter_change(self):
+        ps4 = platform_id(self.cat, "Sony PlayStation 4")
+        page = self.open(self.ctx, "/items")
+        page.click("#filtersBtn")
+        btn = f'button[data-fa="p"][data-fv="{ps4}"]'
+        page.focus(btn)
+        page.keyboard.press("Space")
+        self.assertEqual(parse_qs(page.evaluate("location.hash").lstrip("#")), {"p": [str(ps4)]})
+        self.assertEqual(self.count(page), sum(1 for c in active(self.cat) if c["platform_id"] == ps4))
+        self.assertEqual(page.evaluate(self.ACTIVE), ["BUTTON", {"fa": "p", "fv": str(ps4)}])
+        self.assertEqual(page.get_attribute(btn, "aria-pressed"), "true")
+        # Tab moves on from the same place, not from the top of the page.
+        page.keyboard.press("Tab")
+        self.assertNotEqual(page.evaluate("document.activeElement.tagName"), "BODY")
+        # A checkbox and a select keep focus too.
+        page.focus('input[data-fb="mcUnk"]')
+        page.keyboard.press("Space")
+        self.assertIn("mcUnk=1", page.evaluate("location.hash"))
+        self.assertEqual(page.evaluate(self.ACTIVE), ["INPUT", {"fb": "mcUnk"}])
+        page.focus('select[data-fs="mcmin"]')
+        page.keyboard.press("ArrowDown")
+        page.wait_for_function("location.hash.includes('mcmin=')")
+        self.assertEqual(page.evaluate(self.ACTIVE), ["SELECT", {"fs": "mcmin"}])
+        self.assert_clean()
+
+    def test_publisher_search_keeps_focus_and_caret(self):
+        page = self.open(self.ctx, "/games")
+        page.click("#filtersBtn")
+        page.fill('input[data-ps="pub"]', "publisher c")
+        page.press('input[data-ps="pub"]', "ArrowLeft")
+        page.press('input[data-ps="pub"]', "ArrowLeft")
+        # A filter change from outside (a hashchange, as from a bookmark) re-renders the panel.
+        page.evaluate("location.hash = 'g=Action'")
+        page.wait_for_function("document.querySelector('button[data-fa=\"g\"][data-fv=\"Action\"]')"
+                               ".getAttribute('aria-pressed') === 'true'")
+        self.assertEqual(page.evaluate(self.ACTIVE), ["INPUT", {"ps": "pub"}])
+        self.assertEqual(page.evaluate("[document.activeElement.selectionStart, document.activeElement.value]"),
+                         [len("publisher c") - 2, "publisher c"])
+        self.assert_clean()
+
     def test_invalid_values_in_the_hash_are_ignored(self):
         page = self.open(self.ctx, "/items#cat=bogus&mcmin=abc&p=99999&st=nope&ed=maybe&cat=system")
         self.assertEqual(self.count(page), 1)

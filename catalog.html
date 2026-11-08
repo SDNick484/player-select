@@ -546,8 +546,33 @@ function renderHeader() {
   $("token").textContent = `P${i + 1}`;
 }
 
+// Re-rendering replaces the panel and the table, so the focused control is found again by its data attributes
+// (and the caret restored in a text field); otherwise keyboard focus would fall back to <body> on every change.
+const FOCUS_KEYS = ["fa", "fv", "fo", "fb", "fs", "ps", "work", "clear"];
+function focusKey() {
+  const el = document.activeElement;
+  if (!el || el === document.body || !el.closest("#fbody, #view-games, #view-items")) return null;
+  const attrs = FOCUS_KEYS.filter((k) => el.dataset[k] !== undefined).map((k) => [k, el.dataset[k]]);
+  if (!attrs.length) return null;
+  const sel = el.tagName.toLowerCase() + (el.classList.contains("status") ? ".status" : "") +
+    attrs.map(([k, v]) => `[data-${k}="${CSS.escape(v)}"]`).join("");
+  const caret = typeof el.selectionStart === "number" ? [el.selectionStart, el.selectionEnd] : null;
+  return { sel, caret };
+}
+function restoreFocus(k) {
+  if (!k) return;
+  const el = document.querySelector(k.sel);
+  if (!el || el === document.activeElement) return;
+  el.focus({ preventScroll: true });
+  if (k.caret) { try { el.setSelectionRange(k.caret[0], k.caret[1]); } catch (e) { /* not a text field */ } }
+}
+
 function render() {
   if (!S.cat) return;
+  const fk = focusKey();
+  try { renderViews(); } finally { restoreFocus(fk); }
+}
+function renderViews() {
   renderHeader();
   for (const v of ["games", "items", "up-next", "duplicates", "import"]) $(`view-${v}`).hidden = v !== S.view;
   $("filterbar").hidden = !FILTERED.has(S.view);
