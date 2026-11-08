@@ -229,6 +229,54 @@ class RejectTest(StageBase):
         self.assertTrue(any(x["detail"].startswith(f"{u(1)}: ") for x in w))
 
 
+class OutOfRangeTest(StageBase):
+    """Values SQLite cannot store (beyond int64) or that are no sane epoch second: the row is skipped as a
+    bad_row, never a 500 at apply or in the CSV join."""
+
+    def check(self, csv=None, **bad):
+        rows = [ged_row(uuid=u(1), title="Fine"), ged_row(uuid=u(2), title="Broken", **bad)]
+        res, _ = self.stage(rows, csv=csv)
+        self.assertEqual((res["summary"]["added"], res["summary"]["skipped"]), (1, 1), bad)
+        self.assertTrue(any(w["kind"] == "bad_row" and w["detail"].startswith(f"{u(2)}: ")
+                            for w in res["warnings"]), res["warnings"])
+        out = importer.apply(self.store, self.maps, self.imports, res["import_id"], confirm_removals=False,
+                             now=T0 + 1)
+        self.assertEqual(out["summary"]["added"], 1)
+        with self.store.read() as c:
+            self.assertEqual([r[0] for r in c.execute("SELECT source_id FROM copy")], [u(1)])
+
+    def test_integers_beyond_int64(self):
+        # SQLite itself cannot hold these as INTEGER: in a backup they arrive as TEXT digits or as REAL.
+        for col in ("platform_id", "category_id", "ownership_mask", "created_at", "updated_at"):
+            for v in (str(2 ** 63), str(-(2 ** 63) - 1), 1e30, 1e19):
+                with self.subTest(col=col, v=v):
+                    self.setUp()
+                    self.check(**{col: v})
+
+    def test_timestamps_out_of_range(self):
+        for col in ("created_at", "updated_at"):
+            for v in (-1, 253402300800):
+                with self.subTest(col=col, v=v):
+                    self.setUp()
+                    self.check(**{col: v})
+
+    def test_huge_created_at_with_a_csv(self):
+        self.check(csv=build_csv(fixture_csv_rows()), created_at=1e30)
+
+    def test_bounds_are_accepted(self):
+        rows = [ged_row(uuid=u(1), title="Edge", created_at=0, updated_at=253402300799,
+                        ownership_mask=2 ** 63 - 1)]
+        res, _ = self.stage(rows)
+        self.assertEqual((res["summary"]["added"], res["summary"]["skipped"]), (1, 0))
+
+    def test_two_null_uuids_are_bad_rows_not_duplicates(self):
+        rows = [ged_row(uuid=u(1), title="Fine"), ged_row(uuid=None, title="A"), ged_row(uuid=None, title="B"),
+                ged_row(uuid="", title="C"), ged_row(uuid="", title="D")]
+        res, _ = self.stage(rows)
+        self.assertEqual((res["summary"]["added"], res["summary"]["skipped"]), (1, 4))
+        self.assertEqual([w["kind"] for w in res["warnings"]].count("bad_row"), 4)
+
+
 class DiffTest(StageBase):
     def one(self, **ged_kw):
         return ged_row(uuid=u(1), title="Bloodborne", platform_id=46, category_id=0,

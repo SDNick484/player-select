@@ -29,6 +29,7 @@ class GedRow:
     country_id: str | None
     created_at: int | None
     updated_at: int | None
+    problems: tuple[str, ...] = ()   # out-of-range values (set to None): the importer skips the row
 
 
 @dataclass
@@ -49,8 +50,21 @@ def _copy_capped(src: BinaryIO, dst: BinaryIO, limit: int) -> int:
         dst.write(chunk)
 
 
+INT64_MIN, INT64_MAX = -(2 ** 63), 2 ** 63 - 1
+TS_MAX = 253402300799                 # 9999-12-31T23:59:59Z: the last second datetime can show
+
+
 def _int(v):
     return None if v is None else int(v)
+
+
+def _ranged(v, name: str, lo: int, hi: int, problems: list[str]):
+    """int(v), or None with a problem noted when it is outside [lo, hi] (SQLite INTEGER is int64)."""
+    n = _int(v)
+    if n is not None and not lo <= n <= hi:
+        problems.append(f"{name} out of range")
+        return None
+    return n
 
 
 def _str(v):
@@ -96,11 +110,15 @@ def _read_db(db_path: Path) -> GedFile:
             seen: set[str] = set()
             for r in cur:
                 uid = _str(r[0])
-                if uid in seen:
-                    raise GedError("duplicate_uuid", f"duplicate uuid {uid}")
-                seen.add(uid)
-                rows.append(GedRow(uid, _str(r[1]), _int(r[2]), _int(r[3]), _str(r[4]),
-                                   _int(r[5]), _str(r[6]), _int(r[7]), _int(r[8])))
+                if uid:                   # a missing uuid is a bad row (importer), not a duplicate
+                    if uid in seen:
+                        raise GedError("duplicate_uuid", f"duplicate uuid {uid}")
+                    seen.add(uid)
+                p: list[str] = []
+                ints = [_ranged(r[i], REQUIRED_COLUMNS[i], INT64_MIN, INT64_MAX, p) for i in (2, 3, 5)]
+                stamps = [_ranged(r[i], REQUIRED_COLUMNS[i], 0, TS_MAX, p) for i in (7, 8)]
+                rows.append(GedRow(uid, _str(r[1]), ints[0], ints[1], _str(r[4]), ints[2], _str(r[6]),
+                                   stamps[0], stamps[1], tuple(p)))
         except sqlite3.DatabaseError as e:
             raise GedError("not_sqlite", "not a readable SQLite database") from e
     except sqlite3.DatabaseError as e:

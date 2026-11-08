@@ -1,0 +1,19 @@
+# Catalog web server. Copy to /etc/systemd/system/, adjust paths/user, then:
+#   systemctl daemon-reload && systemctl enable --now player-select
+[Unit]
+Description=Player Select console catalog
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=games
+ExecStart=/usr/bin/python3 /opt/player-select/player_select_server.py --port 8486 --data /home/games/data --persons /home/games/persons.json
+# Optional header link to another page:
+# ExecStart=/usr/bin/python3 /opt/player-select/player_select_server.py --port 8486 --data /home/games/data --persons /home/games/persons.json --nav "Steam=https://steam.example.com/"
+Restart=on-failure
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/home/games/data
+
+[Install]
+WantedBy=multi-user.target

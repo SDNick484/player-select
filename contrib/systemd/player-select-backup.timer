@@ -1,0 +1,10 @@
+# Nightly backup. Enable with: systemctl enable --now player-select-backup.timer
+[Unit]
+Description=Nightly SQLite backup for Player Select
+
+[Timer]
+OnCalendar=*-*-* 03:30:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

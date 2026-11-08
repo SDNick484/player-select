@@ -3,8 +3,9 @@
 What it proves: every page path loads its own view with no console errors, failed requests or requests off the
 server; the Games and Items views list what /api/catalog says they should; the header carries the --nav links and
 switching views keeps the filter hash and survives a reload; a status set for one person is not shown for another
-and survives a reload; a stale catalog ETag (412) is refetched and the save retried once; and the page still works
-when localStorage throws.
+and survives a reload; a stale catalog ETag (412) is refetched and the save retried once; a save still applies when a
+proxy weakens the ETag (W/"..."); with no persons the page says to add them and disables status and note controls;
+and the page still works when localStorage throws.
 
 The server is seeded with the fixture backup and CSV through the real importer (tests/_seed.py): 7 active copies,
 persons Player A and Player B. Expected counts are worked out here from GET /api/catalog.
@@ -145,6 +146,67 @@ class PageSmoke(BrowserCase):
         page.select_option("#person", str(b))
         self.assertEqual(page.input_value(f'select.status[data-work="{dk}"]'), "playing")
         self.assert_clean(allow=("HTTP 412", CHROME_HTTP_ERROR))
+
+    def test_status_save_works_behind_a_proxy_that_weakens_etags(self):
+        # Cloudflare (Respect Strong ETags off, the default) serves the catalog's ETag as W/"..." to visitors
+        # that accept gzip; the page sends that value back in If-Match and the save must still apply.
+        self.serve()
+        cat = self.catalog()
+        bb = work_id(cat, "Bloodborne")
+        a = cat["persons"][0]["id"]
+        ctx = self.context()
+        seen = []
+
+        def weaken(route):
+            resp = route.fetch()
+            headers = dict(resp.headers)
+            if "etag" in headers and not headers["etag"].startswith("W/"):
+                headers["etag"] = "W/" + headers["etag"]
+            route.fulfill(response=resp, headers=headers)
+        ctx.route("**/api/catalog", weaken)
+        ctx.route("**/api/play-state", weaken)
+        page = self.open(ctx, "/games")
+        page.on("request", lambda r: seen.append(r.headers.get("if-match")) if r.url.endswith("/api/play-state") else None)
+        statuses = []
+        page.on("response", lambda r: statuses.append(r.status) if r.url.endswith("/api/play-state") else None)
+        page.select_option(f'select.status[data-work="{bb}"]', "finished")
+        page.wait_for_function("document.querySelector('select.status[data-work=\"%d\"]').dataset.saved === '1'" % bb)
+        self.assertEqual(statuses, [200])
+        self.assertTrue(seen and seen[0].startswith("W/"), seen)
+        # A second save sends the weak ETag from the first save's response.
+        page.select_option(f'select.status[data-work="{bb}"]', "playing")
+        page.wait_for_function("document.querySelector('select.status[data-work=\"%d\"]').value === 'playing'"
+                               " && document.querySelector('select.status[data-work=\"%d\"]').dataset.saved === '1'" % (bb, bb))
+        self.assertEqual(statuses, [200, 200])
+        self.assertEqual([(s["person"], s["work"], s["status"]) for s in self.catalog()["play_state"]],
+                         [(a, bb, "playing")])
+        self.assert_clean()
+
+    def test_no_persons_says_so_and_disables_status_and_notes(self):
+        self.serve(persons=None)
+        cat = self.catalog()
+        self.assertEqual(cat["persons"], [])
+        bb = work_id(cat, "Bloodborne")
+        page = self.open(self.context(), "/games")
+        sent = []
+        page.on("request", lambda r: sent.append(r.url) if r.url.endswith("/api/play-state") else None)
+        self.assertIn("Add people to persons.json", page.inner_text("header"))
+        self.assertTrue(page.is_hidden("#person"))
+        sels = page.locator("#view-games select.status")
+        self.assertGreater(sels.count(), 0)
+        self.assertEqual(page.eval_on_selector_all("#view-games select.status", "els => els.filter(e => !e.disabled).length"), 0)
+        page.click(f'tr.work-row[data-work="{bb}"] button.disclose')
+        detail = page.inner_text(f'tr.detail-row[data-detail="w{bb}"]')
+        self.assertIn("Add people to persons.json", detail)
+        self.assertEqual(page.locator("textarea.note:not([disabled]), button[data-savenote]:not([disabled])").count(), 0)
+        page.goto(self.base + "/up-next")
+        page.wait_for_function("document.documentElement.dataset.ready === '1'")
+        self.assertIn("Add people to persons.json", page.inner_text("#view-up-next"))
+        self.assertEqual(sent, [])
+        phone = self.open(self.context(width=390, height=844), "/games")
+        self.assertTrue(phone.is_visible("#noPersons"))
+        self.assertLessEqual(phone.evaluate("document.documentElement.scrollWidth"), 390)
+        self.assert_clean()
 
     def test_status_select_keeps_keyboard_focus_after_saving(self):
         self.serve()
