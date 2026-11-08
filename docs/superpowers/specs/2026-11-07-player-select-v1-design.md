@@ -1,7 +1,8 @@
 # Player Select v1: design
 
 - **Date:** 2026-11-07
-- **Status:** design agreed in brainstorming; awaiting review of this written spec
+- **Status:** approved and implemented in v1 (PRs #1–#6, merged 2026-11-08); amended 2026-11-08
+  (persons seeding, retitles); the spike plan (section 9) has not run yet
 - **Repo:** `SDNick484/player-select` (public, MIT)
 - **Host:** Alpine LXC on Proxmox (same container as steam-backlog-triage), `games.<your-domain>` via Cloudflare Tunnel + Access
 - **Sibling:** [`SDNick484/steam-backlog-triage`](https://github.com/SDNick484/steam-backlog-triage) (read at commit `114368a`), referred to below as **SBT**
