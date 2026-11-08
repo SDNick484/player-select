@@ -3,8 +3,9 @@
 What it proves: every page path loads its own view with no console errors, failed requests or requests off the
 server; the Games and Items views list what /api/catalog says they should; the header carries the --nav links and
 switching views keeps the filter hash and survives a reload; a status set for one person is not shown for another
-and survives a reload; a stale catalog ETag (412) is refetched and the save retried once; and the page still works
-when localStorage throws.
+and survives a reload; a stale catalog ETag (412) is refetched and the save retried once; a save still applies when a
+proxy weakens the ETag (W/"..."); with no persons the page says to add them and disables status and note controls;
+and the page still works when localStorage throws.
 
 The server is seeded with the fixture backup and CSV through the real importer (tests/_seed.py): 7 active copies,
 persons Player A and Player B. Expected counts are worked out here from GET /api/catalog.
@@ -179,6 +180,32 @@ class PageSmoke(BrowserCase):
         self.assertEqual(statuses, [200, 200])
         self.assertEqual([(s["person"], s["work"], s["status"]) for s in self.catalog()["play_state"]],
                          [(a, bb, "playing")])
+        self.assert_clean()
+
+    def test_no_persons_says_so_and_disables_status_and_notes(self):
+        self.serve(persons=None)
+        cat = self.catalog()
+        self.assertEqual(cat["persons"], [])
+        bb = work_id(cat, "Bloodborne")
+        page = self.open(self.context(), "/games")
+        sent = []
+        page.on("request", lambda r: sent.append(r.url) if r.url.endswith("/api/play-state") else None)
+        self.assertIn("Add people to persons.json", page.inner_text("header"))
+        self.assertTrue(page.is_hidden("#person"))
+        sels = page.locator("#view-games select.status")
+        self.assertGreater(sels.count(), 0)
+        self.assertEqual(page.eval_on_selector_all("#view-games select.status", "els => els.filter(e => !e.disabled).length"), 0)
+        page.click(f'tr.work-row[data-work="{bb}"] button.disclose')
+        detail = page.inner_text(f'tr.detail-row[data-detail="w{bb}"]')
+        self.assertIn("Add people to persons.json", detail)
+        self.assertEqual(page.locator("textarea.note:not([disabled]), button[data-savenote]:not([disabled])").count(), 0)
+        page.goto(self.base + "/up-next")
+        page.wait_for_function("document.documentElement.dataset.ready === '1'")
+        self.assertIn("Add people to persons.json", page.inner_text("#view-up-next"))
+        self.assertEqual(sent, [])
+        phone = self.open(self.context(width=390, height=844), "/games")
+        self.assertTrue(phone.is_visible("#noPersons"))
+        self.assertLessEqual(phone.evaluate("document.documentElement.scrollWidth"), 390)
         self.assert_clean()
 
     def test_status_select_keeps_keyboard_focus_after_saving(self):

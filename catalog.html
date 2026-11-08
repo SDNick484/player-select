@@ -91,6 +91,7 @@ a.btn { display: inline-flex; align-items: center; color: var(--ink); text-decor
   border-radius: 6px; background: var(--surface); color: var(--ink); }
 .fgroup input[type="search"] { width: 100%; margin: 6px 0; }
 .fhint { margin: 6px 0 0; font-size: 12.5px; color: var(--muted); }
+.nopersons { font-weight: 600; }
 .check { display: inline-flex; gap: 6px; align-items: center; cursor: pointer; }
 
 /* ---- the tables */
@@ -274,6 +275,7 @@ td.act a { display: block; margin-top: 6px; font-size: 12.5px; color: var(--mute
       <span class="token" id="token" aria-hidden="true">P1</span>
       <label for="person" class="sr">Player: whose status to show and edit</label>
       <select id="person"></select>
+      <span id="noPersons" class="nopersons" hidden>Add people to persons.json, then restart the server.</span>
     </div>
     <nav class="tabs" aria-label="Views">
       <a href="/games" data-view="games">Games</a>
@@ -340,6 +342,7 @@ const FORMS = [["physical", "Physical"], ["digital", "Digital"], ["subscription_
 const STATUSES = [["backlog", "Backlog"], ["up_next", "Up next"], ["playing", "Playing"], ["finished", "Finished"],
                   ["abandoned", "Abandoned"], ["not_for_me", "Not for me"]];
 const ST_KEYS = STATUSES.map(([k]) => k);
+const NO_PERSONS = "Add people to persons.json, then restart the server.";
 const COND_ORDER = ["New", "CIB", "Boxed", "Loose"];
 const FAMILIES = [["playstation", "PlayStation"], ["xbox", "Xbox"], ["nintendo", "Nintendo"], ["sega", "Sega"],
                   ["atari", "Atari"], ["nec", "NEC"], ["pc", "PC"], ["media", "Books & media"], ["other", "Other"]];
@@ -539,6 +542,7 @@ function statusSelect(work, title, person = S.person, inDetail = false) {
   const cur = pend ? S.pending.get(pk).status : statusOf(work, person);  // a save in flight shows its value until it lands
   const opts = [["", "—"], ...STATUSES].map(([k, l]) => `<option value="${k}"${k === cur ? " selected" : ""}>${esc(l)}</option>`).join("");
   const ids = inDetail ? `data-dwork="${work}" data-person="${person}"` : `data-work="${work}"`;
+  if (person == null) return `<select class="status" ${ids} disabled aria-label="${esc(`Status: ${title}. ${NO_PERSONS}`)}">${opts}</select>`;
   return `<select class="status" ${ids} data-saved="${pend ? 0 : 1}" style="${cur ? `--st:var(--st-${cur})` : ""}" aria-label="${esc(`Status for ${personName(person)}: ${title}`)}">${opts}</select>`;
 }
 // Clearing a status deletes the play_state row and its note with it, so a status with a note asks first.
@@ -612,7 +616,8 @@ function workDetail(w, shown) {
     return `<li class="cp${rm ? " removed" : ""}"><div class="cp-main">${chipHtml(c, true)}
       <span class="muted num">Added ${day(c.created_at) || "?"}</span>${rm ? `<span class="tag">Removed${c.removed_reason ? ": " + esc(c.removed_reason) : ""}</span>` : ""}</div>${form}</li>`;
   }).join("");
-  const players = S.cat.persons.map((p) => playerBlock(w, p)).join("");
+  const players = S.cat.persons.length ? S.cat.persons.map((p) => playerBlock(w, p)).join("")
+    : `<p class="fhint">${NO_PERSONS} Statuses and notes need a player.</p>`;
   const q = S.mergeQ.get(w.id) || "";
   return `<tr class="detail-row" data-detail="w${w.id}" id="d-w${w.id}"><td colspan="5"><div class="detail">
     <div>
@@ -708,6 +713,10 @@ function copyDetail(c, p) {
 
 // ---------------------------------------------------------------- Up next, Duplicates, Import
 function renderUpNext() {
+  if (S.person == null) {
+    $("view-up-next").innerHTML = `<h2>Up next</h2><div class="empty">${NO_PERSONS}</div>`;
+    return;
+  }
   const who = personName(S.person);
   const order = (S.cat.up_next[String(S.person)] || []).filter((w) => S.ix.works.has(w));
   const msg = S.unMsg ? `<p class="msg${S.unMsg.err ? " err" : ""}" role="alert">${esc(S.unMsg.text)}</p>` : "";
@@ -887,6 +896,10 @@ function renderPanel() {
 
 function renderHeader() {
   const sel = $("person");
+  const none = !S.cat.persons.length;
+  sel.hidden = none;
+  $("token").hidden = none;
+  $("noPersons").hidden = !none;
   const opts = S.cat.persons.map((p) => `<option value="${p.id}">${esc(p.name)}</option>`).join("");
   if (sel.innerHTML !== opts) sel.innerHTML = opts;
   sel.value = String(S.person);
