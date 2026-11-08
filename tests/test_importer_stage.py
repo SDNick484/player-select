@@ -145,6 +145,26 @@ class FirstStageTest(StageBase):
         self.assertNotIn("csv", res["summary"])
 
 
+class RobustnessTest(StageBase):
+    def test_leftover_workdir_and_tmp(self):
+        ged = build_ged(FIXTURE_ROWS)
+        sha = hashlib.sha256(ged).hexdigest()
+        self.imports.mkdir()
+        (self.imports / f"{sha}.d").mkdir()
+        (self.imports / f"{sha}.ged.tmp").write_bytes(b"stale")
+        res = stage(self.store, self.maps, self.imports, ged, None, now=T0)
+        self.assertEqual(res["summary"]["added"], 7)
+        self.assertEqual((self.imports / f"{sha}.ged").read_bytes(), ged)
+
+    def test_double_submit(self):
+        a, ged = self.stage()
+        b = stage(self.store, self.maps, self.imports, ged, None, now=T0)
+        self.assertNotEqual(a["import_id"], b["import_id"])
+        self.assertEqual(self.q("SELECT COUNT(*) FROM import_run WHERE status='staged'")[0][0], 2)
+        self.assertEqual(sorted(p.name for p in self.imports.iterdir()),
+                         [f"{hashlib.sha256(ged).hexdigest()}.ged"])
+
+
 class ShortCircuitTest(StageBase):
     def _seven(self):
         for n in range(1, 8):

@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 import shutil
+import tempfile
 import sqlite3
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -141,14 +142,14 @@ def _diff(conn: sqlite3.Connection, mapped: list[Mapped], skipped=()) -> list[di
 # ---- files, expiry -----------------------------------------------------------------------
 
 def _write_private(path: Path, data: bytes) -> None:
-    tmp = path.with_name(path.name + ".tmp")
-    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=path.name + ".", suffix=".tmp")
     try:
         with os.fdopen(fd, "wb") as f:
+            os.fchmod(f.fileno(), 0o600)
             f.write(data)
         os.replace(tmp, path)
     finally:
-        tmp.unlink(missing_ok=True)
+        Path(tmp).unlink(missing_ok=True)
 
 
 def _live_shas(conn: sqlite3.Connection) -> set[str]:
@@ -174,8 +175,8 @@ def expire(conn: sqlite3.Connection, imports_dir: Path, *, now: int) -> int:
 
 # ---- stage -------------------------------------------------------------------------------
 
-def _read_staged(path: Path, workdir: Path) -> GedFile:
-    workdir.mkdir(mode=0o700)
+def _read_staged(path: Path, imports_dir: Path) -> GedFile:
+    workdir = Path(tempfile.mkdtemp(dir=imports_dir, prefix=path.stem + ".", suffix=".d"))
     try:
         return read_ged(path, workdir, max_bytes=MAX_DB_BYTES)
     except GedError as e:
@@ -215,7 +216,7 @@ def stage(store, maps: IdMaps, imports_dir: Path, ged: bytes, csv: bytes | None,
     ged_path = imports_dir / f"{sha}.ged"
     _write_private(ged_path, ged)
     try:
-        ged_file = _read_staged(ged_path, imports_dir / f"{sha}.d")
+        ged_file = _read_staged(ged_path, imports_dir)
     except ImportFailure:
         with store.write() as conn:
             if sha not in _live_shas(conn):
