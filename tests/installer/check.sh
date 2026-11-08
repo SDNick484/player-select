@@ -89,6 +89,9 @@ PERSONS=$HOME_DIR/persons.json
 TAB=/etc/crontabs/games
 SAVED=/etc/player-select.conf
 INIT=/etc/init.d/player-select
+# Stock Alpine (and so python:3.12-alpine) already has a 'games' account; the installer must reuse it untouched.
+games_pre=0
+id games >/dev/null 2>&1 && games_pre=1
 # Start from a machine that has never had the installer (matters when this is re-run in the same VM).
 rm -f "$SAVED" "$INIT" "$PERSONS"
 rm -rf "$PREFIX" "$DATA"
@@ -124,7 +127,7 @@ service_healthy() {
     sh -c 'echo $$ > "$1"; shift; exec "$@"' sh "$pidfile" python3 "$PREFIX/player_select_server.py" \
       --port "$port" --bind 127.0.0.1 --data "$DATA" --persons "$PERSONS" > "$STUBS/server.log" 2>&1 &
   else
-    su games -s /bin/sh -c "echo \$\$ > '$pidfile'; exec python3 '$PREFIX/player_select_server.py' --port $port --bind 127.0.0.1 --data '$DATA' --persons '$PERSONS'" \
+    su -s /bin/sh -c "echo \$\$ > '$pidfile'; exec python3 '$PREFIX/player_select_server.py' --port $port --bind 127.0.0.1 --data '$DATA' --persons '$PERSONS'" games \
       > "$STUBS/server.log" 2>&1 &
   fi
   server_pid=$!
@@ -178,6 +181,15 @@ check "persons.json holds the placeholder person" \
 check "persons.json is mode 600" test "$(stat -c %a "$PERSONS")" = 600
 check "the installed server and its modules import (rc-service is stubbed, so nothing started it)" \
   sh -c "cd '$PREFIX' && python3 -c 'import player_select_server, ps.importer'"
+if [ "$games_pre" = 1 ]; then
+  check "a pre-existing games account is reused, and says so" grep -q "Existing 'games' account reused" "$STUBS/out.first"
+  check "the data tree is owned by games" sh -c "[ \"\$(stat -c %U '$DATA')\" = games ] && [ \"\$(stat -c %U '$DATA/imports')\" = games ]"
+  check "persons.json is owned by games" sh -c "[ \"\$(stat -c %U '$PERSONS')\" = games ]"
+  check "the installer did not create a second account" sh -c "[ \"\$(grep -c '^games:' /etc/passwd)\" = 1 ]"
+else
+  check "a missing games account is created with the home dir and /bin/sh" grep -q -- "^adduser -D -h $HOME_DIR -s /bin/sh games" "$CALLS"
+fi
+check "the printed backup hint uses su -s" grep -q "su -s /bin/sh games -c '$PREFIX/backup.sh $DATA'" "$STUBS/out.first"
 check "service healthy: the installed server answers /healthz with ok" service_healthy
 
 cp "$TAB" "$STUBS/tab.first"

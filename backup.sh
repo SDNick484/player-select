@@ -1,13 +1,13 @@
 #!/bin/sh
 # backup.sh - nightly online backup of the Player Select database.
 #
-#   backup.sh [DATA_DIR]      (default: $HOME/data)
+#   backup.sh [DATA_DIR]      (default: /home/games/data)
 #
 # Uses SQLite's online backup API (`.backup`), which is safe while the server is running in WAL mode, writes
 # backups/player_select-YYYY-MM-DD.db and deletes copies older than 14 days. Exits 78 when there is no database.
 set -eu
 
-DATA="${1:-$HOME/data}"
+DATA="${1:-/home/games/data}"
 DB="$DATA/player_select.db"
 OUT_DIR="$DATA/backups"
 

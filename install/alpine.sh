@@ -47,7 +47,14 @@ if [ -n "$TZ_NAME" ]; then
 fi
 
 say "Creating the unprivileged '$APP_USER' user"
-id "$APP_USER" >/dev/null 2>&1 || adduser -D -h "$HOME_DIR" -s /bin/sh "$APP_USER"
+# Stock Alpine already has a 'games' system account (home /usr/games, shell nologin). It is reused as it is,
+# never modified, so nothing here relies on its home directory or login shell: every path is explicit.
+if id "$APP_USER" >/dev/null 2>&1; then
+  echo "Existing '$APP_USER' account reused as is (not modified)."
+else
+  adduser -D -h "$HOME_DIR" -s /bin/sh "$APP_USER"
+fi
+mkdir -p "$HOME_DIR"
 mkdir -p "$DATA/imports" "$DATA/backups" "$HOME_DIR/logs"
 chmod 0700 "$DATA/imports"
 
@@ -135,5 +142,5 @@ EOF
 say "Done"
 echo "Persons: $PERSONS"
 echo "Data and backups: $DATA"
-echo "Back up now: su $APP_USER -c '$PREFIX/backup.sh $DATA'"
+echo "Back up now: su -s /bin/sh $APP_USER -c '$PREFIX/backup.sh $DATA'"
 echo "Logs: $HOME_DIR/logs/"
