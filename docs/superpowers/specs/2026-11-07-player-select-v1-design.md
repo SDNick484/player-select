@@ -271,6 +271,14 @@ V: Skyrim* (PS3, Switch); *Ocarina of Time* (N64, Switch 2 *[Foil Cover Art]*). 
 Work attachment on import: look up `work_key` in `work_alias`; if absent create `work(title = raw
 title without the bracket)` and the alias. Copies with `work_pinned = 1` are never reassigned.
 
+Retitles (amended 2026-11-08): when an unpinned game copy's `work_key` changes on import and its old
+work has no other copies (active or removed), the old work's state comes along. If the new key has no
+alias, the old work is kept, its title becomes the new display title and it gains the new key's alias
+(the old alias stays). If the new key already aliases another work, the copy is attached there and the
+old work is merged into it by the Merge rules below, in the same transaction; a merge refusal (merged
+note too long) fails the apply with 409 and the run stays staged. If the old work still has other
+copies, the copy is attached by plain lookup as above.
+
 - **Merge** (`into`, `from`): repoint `work_alias`, `copy`, `up_next_order`, `dup_ack`; merge
   `play_state` per person (keep the later `updated_at`; if both have notes, append the other note after
   a blank line); delete `from`. One transaction.

@@ -126,6 +126,8 @@ Open **Import** in the page header.
 3. **Removal guard.** If the backup would remove more than 25% of the active GameEye copies, the page asks you to confirm. This catches a backup from the wrong device or an empty collection.
 4. **Apply.** The changes are written in one transaction. Removed copies are kept, soft-deleted, so play state, notes and removal reasons survive; you can record a reason (sold, traded, lost, gifted, mistake) in **Items**.
 
+**Retitles keep their state.** If you fix a title in GameEye (say a typo) and that copy was its game's only copy, the game is renamed in place: statuses, notes and Up next positions stay with it. If the new title matches a game you already have, the copy joins it and the two games' play state is merged as a manual merge would (the later status wins, notes are joined); if the merged note would be over 2,000 characters, apply is refused with `409 note_too_long` until you shorten one. A copy whose game has other copies moves to the game for its new title, and the old game keeps its state. Copies you split out by hand are never moved.
+
 Importing the same backup again is a no-op: the response says everything is unchanged and nothing is staged. A staged run expires after an hour. If another import was applied after you staged, apply is refused and you stage again.
 
 Uploads are limited to 32 MiB, and the database inside the backup to 256 MiB. Staged files are kept in `imports/` (mode 0600) only until applied or expired.
