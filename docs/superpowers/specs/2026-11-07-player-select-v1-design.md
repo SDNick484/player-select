@@ -471,11 +471,34 @@ one sanitized fixture that passes the privacy scan.
 | Xbox title history v2 / OpenXBL | not from title history | yes | owned library needs a collections endpoint: the main question |
 | pynintendoparental (Python 2.6.3) | no | per device and player, minutes | async (`aiohttp`); library means eShop history or manual |
 
+**Prior art: Minimap** (a commercial tracker that syncs PSN, Xbox, Steam and Switch; checked
+2026-11-08 against its public FAQ). How it links each platform shows what is reachable without
+official APIs. The mechanisms are inferred from the sign-up method; the limits are stated in its FAQ.
+
+| Platform | Minimap asks for | Likely mechanism | Gets |
+|---|---|---|---|
+| PlayStation | Online ID only, no login | its own PSN token reading the user's **public** profile (profile, game details and play time must be public) | played games and trophies, refreshed daily |
+| Xbox | Microsoft sign-in | OAuth, title history and achievements | played games and achievements |
+| Nintendo Switch | friend code | a bot account that friends the user and reads Play Activity (the nxapi mechanism) | the **20 most recently played** games only |
+
+What it changes for the spikes:
+
+- No source Minimap uses yields an **owned** library; it imports played games only. Question 1 still
+  rests on PSNAWP entitlements (PSN) and a collections endpoint (Xbox).
+- **PSN, question 5:** test whether one NPSSO can read every household account's played games when
+  those profiles are public (psn-api `getUserPlayedGames(accountId)` for another account). If so,
+  play history needs one token, not one per person.
+- **Nintendo:** the friend / Play Activity route is capped at 20 titles, so it is not a candidate
+  source; Parental Controls stays the play-history option.
+- If the household has Minimap connected, compare its per-platform counts with each spike's results
+  as a sanity check. Minimap is evidence, not a source: it has no export or public API, and adding
+  it would stack a second unofficial layer on the first.
+
 **Timeboxes.**
 
 | Spike | Time | First | Then |
 |---|---|---|---|
-| PSN | 3 h | PSNAWP entitlements with the owner's NPSSO; compare count with the PS5 library; inspect a known PS Plus claim | psn-api for comparison; refresh-token lifetime |
+| PSN | 3 h | PSNAWP entitlements with the owner's NPSSO; compare count with the PS5 library; inspect a known PS Plus claim | psn-api for comparison; refresh-token lifetime; read another household account's public played games with the same token |
 | Xbox | 3 h | OpenXBL title history for one child's account; look for an owned/collections call | whether one login reads the other accounts |
 | Nintendo | 2 h | pynintendoparental per-player titles and minutes on the Switch 2 | eShop purchase history: export, signed-in-browser scrape, or manual |
 | Write-up | 1 h | fill the matrix; recommend the first adapter | |
