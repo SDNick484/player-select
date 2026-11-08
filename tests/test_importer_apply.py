@@ -65,7 +65,8 @@ class ApplyFirstTest(ApplyBase):
         self.assertIsNotNone(res["import_id"])
         out = self.apply(res["import_id"], now=T0 + 110)
         self.assertEqual(out["summary"], {"added": 0, "edited": 0, "removed": 0, "restored": 0,
-                                          "unchanged": 7, "skipped": 1})
+                                          "unchanged": 7, "skipped": 1,
+                                          "csv": {"enriched": 4, "unmatched": 0, "ambiguous": 2}})
         self.assertEqual(list(self.imports.iterdir()), [])
 
     def test_last_seen_import_set_on_unchanged(self):

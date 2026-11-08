@@ -10,6 +10,7 @@ import sqlite3
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
+from ps.gameeye_csv import CopyKey, CsvError, CsvRow, MatchResult, match, parse_csv
 from ps.gameeye_ged import GedError, GedFile, read_ged
 from ps.idmaps import CATEGORY_CODE, UNMAPPED, IdMaps, condition_label, ensure_platform
 from ps.titles import display_title, normalize
@@ -173,6 +174,46 @@ def expire(conn: sqlite3.Connection, imports_dir: Path, *, now: int) -> int:
     return len(rows)
 
 
+# ---- CSV enrichment (spec 6.1 step 7, 6.3) -------------------------------------------------
+
+def _parse_csv(data: bytes) -> list[CsvRow]:
+    try:
+        return parse_csv(data)
+    except CsvError as e:
+        raise ImportFailure(400, "bad_csv", str(e)) from e
+
+
+def _match_csv(rows: list[CsvRow], mapped: list[Mapped], maps: IdMaps) -> MatchResult:
+    keys = [CopyKey(m.source_id, m.platform_name, m.raw_title, m.created_at,
+                    condition_label(m.condition_mask)) for m in mapped]
+    return match(keys, rows, maps)
+
+
+def _csv_summary(res: MatchResult) -> dict:
+    return {"enriched": res.enriched, "unmatched": res.unmatched, "ambiguous": res.ambiguous}
+
+
+def _write_meta(conn: sqlite3.Connection, meta: dict[str, dict[str, str]], now: int) -> None:
+    """Upsert matched fields; a field the matched CSV row leaves null loses its stored row (D-b)."""
+    ids = {r[0]: r[1] for r in conn.execute(
+        "SELECT source_id, id FROM copy WHERE source='gameeye'")}
+    for sid, fields in meta.items():
+        cid = ids[sid]
+        for field, value in fields.items():
+            conn.execute(
+                "INSERT INTO copy_meta (copy_id, field, value, source, fetched_at)"
+                " VALUES (?, ?, ?, 'gameeye_csv', ?) ON CONFLICT (copy_id, field, source)"
+                " DO UPDATE SET value=excluded.value, fetched_at=excluded.fetched_at",
+                (cid, field, value, now))
+        stale = [f for f in _META_FIELDS if f not in fields]
+        conn.execute(f"DELETE FROM copy_meta WHERE copy_id=? AND source='gameeye_csv' AND field IN"
+                     f" ({','.join('?' * len(stale))})", (cid, *stale))
+
+
+_META_FIELDS = ("publisher", "developer", "genre", "metacritic",
+                "price_loose", "price_cib", "price_new")
+
+
 # ---- stage -------------------------------------------------------------------------------
 
 def _read_staged(path: Path, imports_dir: Path) -> GedFile:
@@ -206,6 +247,7 @@ def stage(store, maps: IdMaps, imports_dir: Path, ged: bytes, csv: bytes | None,
         expire(conn, imports_dir, now=now)
     if len(ged) > MAX_UPLOAD or (csv is not None and len(csv) > MAX_UPLOAD):
         raise ImportFailure(413, "too_large", f"upload exceeds {MAX_UPLOAD} bytes")
+    csv_rows = _parse_csv(csv) if csv is not None else None
     sha = hashlib.sha256(ged).hexdigest()
     csv_sha = hashlib.sha256(csv).hexdigest() if csv is not None else None
     if csv is None:
@@ -234,6 +276,8 @@ def stage(store, maps: IdMaps, imports_dir: Path, ged: bytes, csv: bytes | None,
             counts[names[c["op"]]] += 1
         unchanged = len(mapped) - counts["added"] - counts["edited"] - counts["restored"]
         summary = {**counts, "unchanged": unchanged, "skipped": len(skipped)}
+        if csv_rows is not None:
+            summary["csv"] = _csv_summary(_match_csv(csv_rows, mapped, maps))
         active = _active_count(conn)
         guard = bool(active) and counts["removed"] > REMOVAL_GUARD * active
         run_id = conn.execute(
@@ -327,6 +371,12 @@ def apply(store, maps: IdMaps, imports_dir: Path, run_id: int, *, confirm_remova
         if json.loads(run["summary_json"]).get("removal_guard") and confirm_removals is not True:
             raise ImportFailure(428, "confirm_removals",
                                 "this import removes over 25% of active copies; confirm to proceed")
+        csv_rows = None
+        if run["csv_sha256"]:
+            csv_path = imports_dir / f"{run['csv_sha256']}.csv"
+            if not csv_path.is_file():
+                raise ImportFailure(410, "expired", "staged CSV is gone; upload again")
+            csv_rows = _parse_csv(csv_path.read_bytes())
         mapped, _warnings, skipped = _map_rows(_read_staged(path, imports_dir), maps)
         changes = _diff(conn, mapped, skipped)
         plats = {m.gameeye_platform_id: ensure_platform(conn, m.gameeye_platform_id, maps)[0]
@@ -338,10 +388,17 @@ def apply(store, maps: IdMaps, imports_dir: Path, run_id: int, *, confirm_remova
                           now)
         conn.executemany("UPDATE copy SET last_seen_import=? WHERE source='gameeye' AND source_id=?",
                          [(run_id, m.source_id) for m in mapped])
+        csv_summary = None
+        if csv_rows is not None:
+            res = _match_csv(csv_rows, mapped, maps)
+            _write_meta(conn, res.meta, now)
+            csv_summary = _csv_summary(res)
         conn.execute("UPDATE import_run SET status='applied', applied_at=? WHERE id=?",
                      (now, run_id))
         summary = {**counts, "unchanged": len(mapped) - counts["added"] - counts["edited"]
                    - counts["restored"], "skipped": len(skipped)}
+        if csv_summary is not None:
+            summary["csv"] = csv_summary
         live = _live_shas(conn)
     for sha, ext in ((run["file_sha256"], "ged"), (run["csv_sha256"], "csv")):
         if sha and sha not in live:

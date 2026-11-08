@@ -134,7 +134,7 @@ class FirstStageTest(StageBase):
         res, _ = self.stage(user_version=21)
         self.assertIn({"kind": "user_version", "detail": "expected 20, got 21"}, res["warnings"])
 
-    def test_csv_attached_not_parsed(self):
+    def test_csv_attached_and_staged(self):
         csv = build_csv(fixture_csv_rows())
         res, _ = self.stage(csv=csv)
         sha = hashlib.sha256(csv).hexdigest()
@@ -142,7 +142,8 @@ class FirstStageTest(StageBase):
         self.assertEqual(p.read_bytes(), csv)
         self.assertEqual(p.stat().st_mode & 0o777, 0o600)
         self.assertEqual(self.q("SELECT csv_sha256 FROM import_run")[0][0], sha)
-        self.assertNotIn("csv", res["summary"])
+        self.assertEqual(res["summary"]["csv"],
+                         {"enriched": 4, "unmatched": 0, "ambiguous": 2})
 
 
 class RobustnessTest(StageBase):
