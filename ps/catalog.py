@@ -8,6 +8,7 @@ import json
 import sqlite3
 
 from .idmaps import condition_label
+from .titles import normalize
 
 STATUSES = ("backlog", "up_next", "playing", "finished", "abandoned", "not_for_me")
 REASONS = ("sold", "traded", "lost", "gifted", "mistake")
@@ -74,7 +75,7 @@ def _catalog(conn: sqlite3.Connection) -> dict:
     last_import = None if run is None else {
         "id": run["id"], "applied_at": run["applied_at"], "summary": json.loads(run["summary_json"])}
     return {"persons": persons, "platforms": platforms, "works": works, "copies": copies,
-            "meta": meta, "play_state": play_state, "up_next": up_next, "dup_groups": [],
+            "meta": meta, "play_state": play_state, "up_next": up_next, "dup_groups": dup_groups(conn),
             "last_import": last_import}
 
 
@@ -171,3 +172,119 @@ def set_removed_reason(conn: sqlite3.Connection, copy_id: int, reason: str | Non
     if row["removed_at"] is None:
         raise CatalogError(409, "not_removed", "copy is still active")
     conn.execute("UPDATE copy SET removed_reason=? WHERE id=?", (reason, copy_id))
+
+
+# ---- merge, split, duplicates -----------------------------------------------------------
+
+def merge(conn: sqlite3.Connection, into: int, from_: int, *, now: int) -> None:
+    """Fold work ``from_`` into ``into`` (spec 5.4, D-d); ``now`` is unused, play_state keeps stamps."""
+    if not _is_int(into) or not _is_int(from_):
+        raise _bad("into and from must be integers")
+    if into == from_:
+        raise _bad("cannot merge a work into itself")
+    _require(conn, "work", into, "work")
+    _require(conn, "work", from_, "work")
+    # Decide every play_state outcome first so a 409 happens before anything is written.
+    plan = []
+    for pid in [r[0] for r in conn.execute(
+            "SELECT DISTINCT person_id FROM play_state WHERE work_id IN (?, ?) ORDER BY person_id",
+            (into, from_))]:
+        rows = {r["work_id"]: r for r in conn.execute(
+            "SELECT * FROM play_state WHERE person_id=? AND work_id IN (?, ?)", (pid, into, from_))}
+        if len(rows) == 1:
+            plan.append((pid, None))
+            continue
+        a, b = rows[into], rows[from_]
+        win, lose = (b, a) if b["updated_at"] > a["updated_at"] else (a, b)
+        note = win["note"]
+        if win["note"] and lose["note"]:
+            note = win["note"] + "\n\n" + lose["note"]
+        elif lose["note"]:
+            note = lose["note"]
+        if note is not None and len(note) > NOTE_MAX:
+            raise CatalogError(409, "note_too_long",
+                               f"merged note would exceed {NOTE_MAX} characters; shorten one first")
+        plan.append((pid, (win["status"], note, win["updated_at"])))
+    conn.execute("UPDATE work_alias SET work_id=? WHERE work_id=?", (into, from_))
+    conn.execute("UPDATE copy SET work_id=? WHERE work_id=?", (into, from_))
+    for pid, merged in plan:
+        if merged is None:
+            conn.execute("UPDATE play_state SET work_id=? WHERE person_id=? AND work_id=?",
+                         (into, pid, from_))
+        else:
+            conn.execute("DELETE FROM play_state WHERE person_id=? AND work_id=?", (pid, from_))
+            conn.execute("UPDATE play_state SET status=?, note=?, updated_at=?"
+                         " WHERE person_id=? AND work_id=?", (*merged, pid, into))
+    conn.execute("DELETE FROM up_next_order WHERE work_id=? AND person_id IN"
+                 " (SELECT person_id FROM up_next_order WHERE work_id=?)", (from_, into))
+    conn.execute("UPDATE up_next_order SET work_id=? WHERE work_id=?", (into, from_))
+    for pid, _ in plan:
+        st = conn.execute("SELECT status FROM play_state WHERE person_id=? AND work_id=?",
+                          (pid, into)).fetchone()[0]
+        if st == "up_next":
+            conn.execute(
+                "INSERT OR IGNORE INTO up_next_order (person_id, work_id, position)"
+                " SELECT ?, ?, COALESCE(MAX(position) + 1, 0) FROM up_next_order WHERE person_id=?",
+                (pid, into, pid))
+        else:
+            conn.execute("DELETE FROM up_next_order WHERE person_id=? AND work_id=?", (pid, into))
+    conn.execute("DELETE FROM dup_ack WHERE work_id IN (?, ?)", (into, from_))
+    conn.execute("DELETE FROM work WHERE id=?", (from_,))
+
+
+def split(conn: sqlite3.Connection, copy_id: int, title: str) -> int:
+    """Move one game copy onto the work for ``title`` (created if needed) and pin it there."""
+    if not _is_int(copy_id):
+        raise _bad("copy id must be an integer")
+    row = conn.execute("SELECT category FROM copy WHERE id=?", (copy_id,)).fetchone()
+    if row is None:
+        raise _not_found("copy")
+    if row["category"] != "game":
+        raise _bad("only game copies can be split")
+    if not isinstance(title, str) or not title.strip():
+        raise _bad("title must be a non-empty string")
+    title = title.strip()
+    key = normalize(title)[0]
+    if not key:
+        raise _bad("title has no letters or digits")
+    alias = conn.execute("SELECT work_id FROM work_alias WHERE work_key=?", (key,)).fetchone()
+    if alias:
+        wid = alias[0]
+    else:
+        wid = conn.execute("INSERT INTO work (title) VALUES (?)", (title,)).lastrowid
+        conn.execute("INSERT INTO work_alias (work_key, work_id) VALUES (?, ?)", (key, wid))
+    conn.execute("UPDATE copy SET work_id=?, work_pinned=1 WHERE id=?", (wid, copy_id))
+    return wid
+
+
+def _groups(conn: sqlite3.Connection) -> list[dict]:
+    groups: dict[tuple[int, int], list[int]] = {}
+    for r in conn.execute("SELECT id, work_id, platform_id FROM copy"
+                          " WHERE removed_at IS NULL AND work_id IS NOT NULL ORDER BY id"):
+        groups.setdefault((r["work_id"], r["platform_id"]), []).append(r["id"])
+    return [{"work": w, "platform": p, "copies": ids}
+            for (w, p), ids in sorted(groups.items()) if len(ids) > 1]
+
+
+def dup_groups(conn: sqlite3.Connection) -> list[dict]:
+    """Unacknowledged duplicate groups (spec 5.6), ordered by work then platform."""
+    acked = {(r["work_id"], r["platform_id"]): r["copy_ids"]
+             for r in conn.execute("SELECT work_id, platform_id, copy_ids FROM dup_ack")}
+    return [g for g in _groups(conn)
+            if acked.get((g["work"], g["platform"])) != json.dumps(g["copies"])]
+
+
+def ack_dup(conn: sqlite3.Connection, work: int, platform: int, *, now: int) -> None:
+    """Mark the current copy set of a duplicate group as reviewed ("separate copies")."""
+    if not _is_int(work) or not _is_int(platform):
+        raise _bad("work and platform must be integers")
+    _require(conn, "work", work, "work")
+    _require(conn, "platform", platform, "platform")
+    for g in _groups(conn):
+        if (g["work"], g["platform"]) == (work, platform):
+            conn.execute(
+                "INSERT INTO dup_ack (work_id, platform_id, copy_ids, acked_at) VALUES (?,?,?,?)"
+                " ON CONFLICT (work_id, platform_id) DO UPDATE SET copy_ids=excluded.copy_ids,"
+                " acked_at=excluded.acked_at", (work, platform, json.dumps(g["copies"]), now))
+            return
+    raise CatalogError(409, "not_a_duplicate", "no duplicate group for that work and platform")

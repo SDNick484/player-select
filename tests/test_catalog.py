@@ -70,7 +70,7 @@ class CatalogReadTest(CatBase):
         self.assertEqual(len(c["copies"]), 7)
         self.assertEqual(len(c["works"]), 4)
         self.assertEqual(set(c["platforms"][0]), {"id", "name", "family", "gameeye_id"})
-        self.assertEqual(c["dup_groups"], [])
+        self.assertEqual(len(c["dup_groups"]), 2)
         self.assertEqual(c["play_state"], [])
         self.assertEqual(c["up_next"], {})
 
