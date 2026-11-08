@@ -347,6 +347,17 @@ class TestLifecycle(unittest.TestCase):
         with Server() as s:
             self.assertEqual((s.data / "imports").stat().st_mode & 0o777, 0o700)
 
+    def test_files_the_server_creates_are_private(self):
+        with Server(seed=False) as s:  # the server creates the data dir and the database itself
+            s.put("/api/play-state", {"person": s.get("/api/catalog").json()["persons"][0]["id"], "work": 1,
+                                      "status": "playing"})
+            self.assertEqual(s.data.stat().st_mode & 0o777, 0o700)
+            made = [p for p in s.data.glob("player_select.db*")]
+            self.assertTrue(made)
+            for p in made:
+                with self.subTest(file=p.name):
+                    self.assertEqual(p.stat().st_mode & 0o077, 0, oct(p.stat().st_mode))
+
     def test_restart_is_idempotent(self):
         s = Server().start()
         try:

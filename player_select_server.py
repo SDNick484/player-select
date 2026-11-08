@@ -426,6 +426,7 @@ def load_persons(path: str | None) -> list[dict]:
 
 
 def main() -> None:
+    os.umask(0o077)  # the database, its WAL files and staged uploads hold personal data: owner-only
     here = os.path.dirname(os.path.abspath(__file__))
     ap = argparse.ArgumentParser(description="Serve the Player Select console catalog.")
     ap.add_argument("--port", type=int, default=8486)

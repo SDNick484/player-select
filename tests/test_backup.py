@@ -67,6 +67,35 @@ class BackupTest(unittest.TestCase):
         self.assertTrue(kept.exists())
         self.assertTrue(other.exists(), "only player_select-*.db is pruned")
 
+    def test_backup_file_is_private(self):
+        self.make_db().close()
+        r = self.run_backup()
+        self.assertEqual(r.returncode, 0, r.stderr)
+        out = self.data / "backups" / f"player_select-{date.today().isoformat()}.db"
+        self.assertEqual(out.stat().st_mode & 0o777, 0o600)
+        self.assertEqual((self.data / "backups").stat().st_mode & 0o777, 0o700)
+
+    def test_failed_rerun_keeps_the_good_backup(self):
+        self.make_db().close()
+        self.assertEqual(self.run_backup().returncode, 0)
+        out = self.data / "backups" / f"player_select-{date.today().isoformat()}.db"
+        good = out.read_bytes()
+        # Same day, second run: sqlite3 fails halfway, after writing part of its output.
+        stubs = self.data / "stubs"
+        stubs.mkdir()
+        fake = stubs / "sqlite3"
+        fake.write_text("#!/bin/sh\n"
+                        "dest=$(printf '%s' \"$2\" | sed \"s/^\\.backup '//; s/'$//\")\n"
+                        "printf 'partial' > \"$dest\"\n"
+                        "exit 1\n")
+        fake.chmod(0o755)
+        r = subprocess.run(["sh", str(BACKUP), str(self.data)], capture_output=True, text=True,
+                           env={**os.environ, "PATH": f"{stubs}:{os.environ['PATH']}"})
+        self.assertNotEqual(r.returncode, 0)
+        self.assertEqual(out.read_bytes(), good, "a failed run must not replace a good backup")
+        self.assertEqual(sorted(p.name for p in (self.data / "backups").iterdir()), [out.name],
+                         "no partial file is left behind")
+
     def test_backup_without_db_exits_78(self):
         r = self.run_backup()
         self.assertEqual(r.returncode, 78)

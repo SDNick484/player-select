@@ -63,7 +63,7 @@ else
 fi
 mkdir -p "$HOME_DIR"
 mkdir -p "$DATA/imports" "$DATA/backups" "$HOME_DIR/logs"
-chmod 0700 "$DATA/imports"
+chmod 0700 "$DATA" "$DATA/imports" "$DATA/backups"   # the database and its backups are personal data
 
 say "Installing to $PREFIX"
 # Replace the code directories wholesale so files removed from the repository do not linger.

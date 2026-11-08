@@ -176,6 +176,8 @@ check "sets the time zone" grep -qx 'Etc/UTC' /etc/timezone
 check "creates the data directory" test -d "$DATA"
 check "imports/ is mode 700" test "$(stat -c %a "$DATA/imports")" = 700
 check "backups/ exists" test -d "$DATA/backups"
+check "the data directory is mode 700" test "$(stat -c %a "$DATA")" = 700
+check "backups/ is mode 700" test "$(stat -c %a "$DATA/backups")" = 700
 check "persons.json holds the placeholder person" \
   grep -qx '\[{"name": "Player 1", "color": "#4c78a8"}\]' "$PERSONS"
 check "persons.json is mode 600" test "$(stat -c %a "$PERSONS")" = 600

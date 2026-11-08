@@ -51,7 +51,7 @@ Run it as root. The installer sets up:
 - the `sqlite` package (for backups), plus `python3`, `tzdata` and `ca-certificates`
 - the code in `/opt/player-select`, owned by root
 - the stock Alpine `games` account, reused as it is. Nothing about it is modified; all paths are explicit.
-- the data in `/home/games/data`: the database, `imports/` (staged uploads, mode 0700) and `backups/`
+- the data in `/home/games/data` (mode 0700): the database, `imports/` (staged uploads) and `backups/`, each mode 0700
 - a placeholder `/home/games/persons.json`, written once (mode 0600) and never overwritten
 - a nightly backup, added as its own marked block in the `games` user's crontab (default 03:30)
 - the catalog as an OpenRC service, `player-select`, on port 8486
@@ -191,7 +191,7 @@ A `W/"…"` ETag there is fine. A missing `ETag` header is not: without it the p
 
 The database holds things no import can recreate: play state, notes, merges and splits, removal reasons. Back it up.
 
-`backup.sh` uses SQLite's online backup (`.backup`), which is safe while the server runs. It writes `backups/player_select-YYYY-MM-DD.db` and deletes copies older than 14 days. The installer schedules it nightly; to run it now:
+`backup.sh` uses SQLite's online backup (`.backup`), which is safe while the server runs. It writes `backups/player_select-YYYY-MM-DD.db` (to a temporary name first, so a failed run never replaces that day's good copy) and deletes copies older than 14 days. Backups are mode 0600, and the server creates its own files owner-only too (umask 077). The installer schedules it nightly; to run it now:
 
 ```sh
 su -s /bin/sh games -c '/opt/player-select/backup.sh /home/games/data'
