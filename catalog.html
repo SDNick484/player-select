@@ -967,10 +967,12 @@ function applyLocal(person, work, status, note) {
   if (status === "") { if (i >= 0) ps.splice(i, 1); }
   else if (i >= 0) { ps[i].status = status; if (note !== undefined) ps[i].note = note; }
   else ps.push({ person, work, status, note: note ?? null, updated_at: Math.floor(Date.now() / 1000) });
+  // Mirror set_play_state: up_next appends only if absent (a work already queued keeps its place); any other
+  // status, or none, takes it out.
   const key = String(person);
-  const order = (S.cat.up_next[key] || []).filter((w) => w !== work);
-  if (status === "up_next") order.push(work);
-  S.cat.up_next[key] = order;
+  const order = S.cat.up_next[key] || [];
+  if (status !== "up_next") S.cat.up_next[key] = order.filter((w) => w !== work);
+  else if (!order.includes(work)) S.cat.up_next[key] = [...order, work];
   psMap = null;
 }
 // Every save runs one at a time, in order. The chain swallows a failed job so one throw (in a fetch, in render,

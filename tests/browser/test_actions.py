@@ -164,6 +164,28 @@ class Actions(BrowserCase):
         self.assertIn("Nothing is up next for Player B", page.inner_text("#view-up-next"))
         self.assert_clean()
 
+    def test_note_save_keeps_up_next_position(self):
+        self.play(self.a, self.bb, "up_next")
+        self.play(self.a, self.dk, "up_next")
+        page = self.open(self.context(), "/games")
+        self.expand(page, self.bb)
+        page.fill(f'textarea[data-note="{self.a}:{self.bb}"]', "First in line")
+        with page.expect_response(PLAY_PUT) as resp:
+            page.click(f'button[data-savenote="{self.a}:{self.bb}"]')
+        self.assertEqual(resp.value.status, 200)
+        page.wait_for_selector(f'tr.detail-row[data-detail="w{self.bb}"] .ok')
+        # The server keeps Bloodborne first; the page (no reload) must show the same order.
+        self.assertEqual(self.catalog()["up_next"], {str(self.a): [self.bb, self.dk]})
+        page.click('header a[data-view="up-next"]')
+        self.assertEqual(self.up_next_titles(page), [self.bb, self.dk])
+        with page.expect_response(lambda r: r.url.endswith("/api/up-next")) as resp:
+            page.click(f'button[data-move="down"][data-mwork="{self.bb}"]')
+        self.assertEqual(resp.value.status, 200)
+        self.assertEqual(resp.value.request.post_data_json, {"person": self.a, "order": [self.dk, self.bb]})
+        self.assertEqual(self.catalog()["up_next"], {str(self.a): [self.dk, self.bb]})
+        self.assertEqual(self.up_next_titles(page), [self.dk, self.bb])
+        self.assert_clean()
+
     def test_up_next_conflict_refetches(self):
         self.play(self.a, self.bb, "up_next")
         self.play(self.a, self.dk, "up_next")
