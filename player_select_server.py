@@ -11,6 +11,8 @@ Standard library only. Serves:
   POST /api/work/merge  {"into", "from"}
   POST /api/work/split  {"copy", "title"}
   POST /api/dup-ack     {"work", "platform"}
+  POST /api/import/gameeye      multipart: ged (required), csv; stages a dry run (32 MiB)
+  POST /api/import/<id>/apply   {"confirm_removals"?: bool}
   GET  /healthz         "ok"
 
 Every response carries X-PlayerSelect-Server: 1 and X-PlayerSelect-Api: 1. Every 4xx/5xx body is
@@ -28,6 +30,8 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import email.parser
+import email.policy
 import hashlib
 import json
 import os
@@ -41,6 +45,9 @@ from ps import idmaps
 from ps.catalog import CatalogError, ack_dup, catalog, merge, seed_persons, set_play_state, \
     set_removed_reason, set_up_next, split
 from ps.db import Store, connect, migrate
+from pathlib import Path
+
+from ps import importer
 from ps.importer import ImportFailure
 
 API_VERSION = "1"
@@ -51,9 +58,10 @@ ROUTES: list[tuple[str, str]] = (
     [("GET", p) for p in PAGES]
     + [("GET", "/healthz"), ("GET", "/api/catalog"), ("PUT", "/api/play-state"), ("PUT", "/api/up-next"),
        ("PUT", "/api/copy/<id>"), ("POST", "/api/work/merge"), ("POST", "/api/work/split"),
-       ("POST", "/api/dup-ack")]
+       ("POST", "/api/dup-ack"), ("POST", "/api/import/gameeye"), ("POST", "/api/import/<id>/apply")]
 )
 COPY_PATH = re.compile(r"^/api/copy/(\d+)$")
+APPLY_PATH = re.compile(r"^/api/import/([0-9]+)/apply$", re.ASCII)
 ERROR_CODES = {404: "not_found", 412: "precondition_failed", 413: "too_large",
                415: "unsupported_media_type"}
 
@@ -107,6 +115,27 @@ def none_match(header: str | None, etag: str) -> bool:
     return False
 
 
+def parse_multipart(content_type: str, body: bytes) -> dict[str, bytes]:
+    """Field name -> bytes for a multipart/form-data body. ValueError if it can't be parsed."""
+    try:
+        msg = email.parser.BytesParser(policy=email.policy.HTTP).parsebytes(
+            b"Content-Type: " + content_type.encode("latin-1", "replace")
+            + b"\r\nMIME-Version: 1.0\r\n\r\n" + body)
+        if msg.get_content_maintype() != "multipart" or not msg.get_boundary():
+            raise ValueError("expected multipart with a boundary")
+        fields: dict[str, bytes] = {}
+        for part in msg.iter_parts():
+            name = part.get_param("name", header="content-disposition")
+            if not isinstance(name, str) or name in fields:
+                continue
+            fields[name] = part.get_payload(decode=True) or b""
+        return fields
+    except ValueError:
+        raise
+    except Exception as e:  # noqa: BLE001 - the email package has several ways to object
+        raise ValueError(f"unparsable multipart body: {e}") from e
+
+
 def config_script(cfg: dict) -> str:
     """Expose server settings (page links) to the page as window.APP_CONFIG."""
     js = json.dumps(cfg).replace("</", "<\\/")
@@ -114,10 +143,11 @@ def config_script(cfg: dict) -> str:
 
 
 class App:
-    def __init__(self, page: str, data_dir: str, nav: list[dict], store: Store):
+    def __init__(self, page: str, data_dir: str, nav: list[dict], store: Store, maps):
         self.page = page
         self.data_dir = os.path.abspath(data_dir)
         self.store = store
+        self.maps = maps
         self.head = SKELETON_HEAD.replace("{config}", config_script({"nav": nav}))
 
     def page_bytes(self) -> bytes:
@@ -206,6 +236,39 @@ def make_handler(app: App):
                 return None
             return obj
 
+        def import_stage(self) -> None:
+            ctype = self.headers.get("Content-Type") or ""
+            if ctype.split(";")[0].strip().lower() != "multipart/form-data":
+                self.close_connection = True
+                return self.error(415, "unsupported_media_type", "Content-Type must be multipart/form-data")
+            raw_len = self.headers.get("Content-Length")
+            if raw_len is None or not (raw_len.strip().isascii() and raw_len.strip().isdigit()):
+                self.close_connection = True
+                return self.error(400, "bad_request", "Content-Length is required")
+            n = int(raw_len)
+            if n > importer.MAX_UPLOAD:
+                self.close_connection = True
+                return self.error(413, "too_large", f"upload is limited to {importer.MAX_UPLOAD} bytes")
+            body = self.rfile.read(n)
+            try:
+                parts = parse_multipart(ctype, body)
+            except ValueError as e:
+                return self.error(400, "bad_request", str(e))
+            ged = parts.get("ged")
+            if not ged:
+                return self.error(400, "missing_ged", "a non-empty 'ged' file part is required")
+            result = importer.stage(app.store, app.maps, Path(app.data_dir) / "imports", ged,
+                                    parts.get("csv") or None, now=int(time.time()))
+            self.json(200, result)
+
+        def import_apply(self, run_id: int, b: dict) -> None:
+            confirm = b.get("confirm_removals", False)
+            if not isinstance(confirm, bool):
+                return self.error(400, "bad_request", "confirm_removals must be a boolean")
+            result = importer.apply(app.store, app.maps, Path(app.data_dir) / "imports", run_id,
+                                    confirm_removals=confirm, now=int(time.time()))
+            self.json(200, result)
+
         # ---- routes
         def page(self) -> None:
             try:
@@ -261,6 +324,11 @@ def make_handler(app: App):
                 ("POST", "/api/dup-ack"): lambda b: self.mutate(
                     lambda c: ack_dup(c, b.get("work"), b.get("platform"), now=int(time.time()))),
             }
+            if (method, p) == ("POST", "/api/import/gameeye"):
+                return self.import_stage()
+            a = APPLY_PATH.match(p)
+            if method == "POST" and a:
+                routes[("POST", p)] = lambda b: self.import_apply(int(a.group(1)), b)
             m = COPY_PATH.match(p)
             if method == "PUT" and m:
                 routes[("PUT", p)] = lambda b: self.copy_put(int(m.group(1)), b)
@@ -365,10 +433,11 @@ def main() -> None:
     finally:
         conn.close()
     store = Store(db)
+    maps = idmaps.load()
     with store.write() as c:
-        idmaps.sync_platforms(c, idmaps.load())
+        idmaps.sync_platforms(c, maps)
         seed_persons(c, persons)
-    app = App(args.page, args.data, nav, store)
+    app = App(args.page, args.data, nav, store, maps)
     srv = ThreadingHTTPServer((args.bind, args.port), make_handler(app))
     print(f"Player Select on http://{args.bind}:{args.port}/ (data in {args.data})", file=sys.stderr, flush=True)
     try:
