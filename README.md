@@ -131,7 +131,7 @@ Open **Import** in the page header.
 
 Importing the same backup again is a no-op: the response says everything is unchanged and nothing is staged. A staged run expires after an hour. If another import was applied after you staged, apply is refused and you stage again.
 
-Uploads are limited to 32 MiB, and the database inside the backup to 256 MiB. Staged files are kept in `imports/` (mode 0600) only until applied or expired.
+Uploads are limited to 32 MiB (the backup and the CSV together; the page checks this before sending), and the database inside the backup to 256 MiB. Staged files are kept in `imports/` (mode 0600) only until applied or expired.
 
 ## Security
 

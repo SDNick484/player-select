@@ -343,6 +343,7 @@ const STATUSES = [["backlog", "Backlog"], ["up_next", "Up next"], ["playing", "P
                   ["abandoned", "Abandoned"], ["not_for_me", "Not for me"]];
 const ST_KEYS = STATUSES.map(([k]) => k);
 const NO_PERSONS = "Add people to persons.json, then restart the server.";
+const UPLOAD_MAX = 32 * 1024 * 1024;  // the server's limit for one import upload (413 above it)
 const COND_ORDER = ["New", "CIB", "Boxed", "Loose"];
 const FAMILIES = [["playstation", "PlayStation"], ["xbox", "Xbox"], ["nintendo", "Nintendo"], ["sega", "Sega"],
                   ["atari", "Atari"], ["nec", "NEC"], ["pc", "PC"], ["media", "Books & media"], ["other", "Other"]];
@@ -1074,6 +1075,13 @@ function moveUpNext(work, dir) {
 function stageImport() {
   const ged = $("gedFile").files[0], csv = $("csvFile").files[0];
   if (!ged || S.imp.phase !== "idle") return;
+  // The server stops reading an upload over the limit, which a browser reports as a network error rather than
+  // the 413: check here and send nothing.
+  if (ged.size + (csv ? csv.size : 0) > UPLOAD_MAX) {
+    S.imp = { phase: "idle", err: `the backup${csv ? " and the CSV together" : ""} must be at most 32 MiB` };
+    render();
+    return;
+  }
   const fd = new FormData();
   fd.append("ged", ged, ged.name);
   if (csv) fd.append("csv", csv, csv.name);
