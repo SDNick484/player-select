@@ -61,11 +61,11 @@ Run it as root. The installer sets up:
 Re-running the installer updates the code and keeps your data, `persons.json` and options. Options are environment variables; pass one again only to change it:
 - `PORT`: the catalog's port (default `8486`).
 - `NAV=Label=URL`: adds a header link, with no spaces in it. `NAV=` (empty) removes it.
-- `TZ_NAME`: sets the system time zone, for example `America/Los_Angeles`.
+- `TZ_NAME`: sets the system time zone, for example `Europe/Lisbon`.
 - `BACKUP_SCHEDULE`: a cron expression for the nightly backup (default `30 3 * * *`).
 
 ```sh
-PORT=8486 NAV=Steam=http://steam-host:8484/ TZ_NAME=America/Los_Angeles \
+PORT=8486 NAV=Steam=http://steam-host:8484/ TZ_NAME=Europe/Lisbon \
   BACKUP_SCHEDULE="15 2 * * *" sh install/alpine.sh
 ```
 
