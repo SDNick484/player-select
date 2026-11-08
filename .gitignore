@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.log
+
+# Personal data and secrets: never committed
+data/
+*.ged
+*.db
+*.db-*
+*_collection.csv
+.env
+.player-select-env
+persons.json
