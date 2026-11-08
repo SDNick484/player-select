@@ -100,6 +100,20 @@ class GedReaderTest(unittest.TestCase):
         rows = FIXTURE_ROWS + [ged_row(uuid=FIXTURE_ROWS[0]["uuid"])]
         self.assertEqual(self.code(build_ged(rows)), "duplicate_uuid")
 
+    def test_out_of_range_values_are_flagged_not_raised(self):
+        rows = [ged_row(uuid=FIXTURE_ROWS[0]["uuid"], platform_id=str(2 ** 63), created_at=1e30, updated_at=-1),
+                ged_row(uuid=FIXTURE_ROWS[1]["uuid"])]
+        g = self.read(build_ged(rows))
+        bad, good = g.rows
+        self.assertEqual((bad.platform_id, bad.created_at, bad.updated_at), (None, None, None))
+        self.assertEqual(bad.problems, ("platform_id out of range", "created_at out of range",
+                                        "updated_at out of range"))
+        self.assertEqual(good.problems, ())
+
+    def test_missing_uuids_are_not_duplicates(self):
+        g = self.read(build_ged([ged_row(uuid=None), ged_row(uuid=None), ged_row(uuid=""), ged_row(uuid="")]))
+        self.assertEqual(len(g.rows), 4)
+
     def test_user_version_reported(self):
         self.assertEqual(self.read(build_ged(FIXTURE_ROWS, user_version=21)).user_version, 21)
 

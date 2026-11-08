@@ -57,10 +57,10 @@ def _map_rows(ged_file: GedFile, maps: IdMaps) -> tuple[list[Mapped], list[dict]
         warnings.append({"kind": "user_version",
                          "detail": f"expected {EXPECTED_USER_VERSION}, got {ged_file.user_version}"})
     for r in ged_file.rows:
-        missing = []
+        missing = list(r.problems)
         if r.title is None or not r.title.strip():
             missing.append("title missing")
-        if r.platform_id is None:
+        if r.platform_id is None and "platform_id out of range" not in r.problems:
             missing.append("platform_id missing")
         if not r.uuid:
             missing.append("uuid missing")
