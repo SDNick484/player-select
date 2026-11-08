@@ -1,0 +1,8 @@
+# One database backup; triggered by player-select-backup.timer.
+[Unit]
+Description=Nightly SQLite backup for Player Select
+
+[Service]
+Type=oneshot
+User=games
+ExecStart=/opt/player-select/backup.sh /home/games/data

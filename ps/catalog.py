@@ -21,15 +21,51 @@ class CatalogError(Exception):
         self.status, self.code, self.detail = status, code, detail
 
 
-def _is_int(v) -> bool:
-    return isinstance(v, int) and not isinstance(v, bool)
+INT64_MIN, INT64_MAX = -(2 ** 63), 2 ** 63 - 1
 
 
-def seed_persons(conn: sqlite3.Connection, persons: list[dict]) -> None:
-    """Insert persons whose name is missing; existing rows are untouched; never deletes."""
+def is_int(v) -> bool:
+    """A JSON integer SQLite can bind (signed 64-bit); larger ones are malformed input, not a 500."""
+    return isinstance(v, int) and not isinstance(v, bool) and INT64_MIN <= v <= INT64_MAX
+
+
+_is_int = is_int
+
+
+def seed_persons(conn: sqlite3.Connection, persons: list[dict]) -> list[str]:
+    """Make the person table follow the persons file (owner decision 2026-11-08).
+
+    Names in the file are inserted or get the file's color and position (sort = list index); ids are
+    kept, so play state stays attached. A person missing from the file is deleted only when they have
+    no play_state and no up_next_order rows; otherwise they are kept, sorted after the file's names.
+    Returns one log line per person kept or removed. An empty list (no file) changes nothing.
+    """
+    if not persons:
+        return []
     for i, p in enumerate(persons):
-        conn.execute("INSERT OR IGNORE INTO person (name, color, sort) VALUES (?, ?, ?)",
+        conn.execute("INSERT INTO person (name, color, sort) VALUES (?, ?, ?) ON CONFLICT (name)"
+                     " DO UPDATE SET color=excluded.color, sort=excluded.sort",
                      (p["name"], p.get("color"), i))
+    names = {p["name"] for p in persons}
+    log, kept = [], 0
+    for r in conn.execute("SELECT id, name FROM person ORDER BY sort, id").fetchall():
+        if r["name"] in names:
+            continue
+        played = conn.execute("SELECT EXISTS (SELECT 1 FROM play_state WHERE person_id=?)"
+                              " OR EXISTS (SELECT 1 FROM up_next_order WHERE person_id=?)",
+                              (r["id"], r["id"])).fetchone()[0]
+        # account rows (reserved for adapters) reference person too: never delete under them either
+        owns = conn.execute("SELECT EXISTS (SELECT 1 FROM account WHERE person_id=?)",
+                            (r["id"],)).fetchone()[0]
+        if played or owns:
+            conn.execute("UPDATE person SET sort=? WHERE id=?", (len(persons) + kept, r["id"]))
+            kept += 1
+            why = "play state" if played else "accounts"
+            log.append(f"persons: kept {r['name']!r} (not in the persons file, but has {why})")
+        else:
+            conn.execute("DELETE FROM person WHERE id=?", (r["id"],))
+            log.append(f"persons: removed {r['name']!r} (not in the persons file, no play state)")
+    return log
 
 
 # ---- read model --------------------------------------------------------------------------

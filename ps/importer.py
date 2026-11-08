@@ -10,6 +10,7 @@ import sqlite3
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
+from ps.catalog import CatalogError, merge
 from ps.gameeye_csv import CopyKey, CsvError, CsvRow, MatchResult, match, parse_csv
 from ps.gameeye_ged import GedError, GedFile, read_ged
 from ps.idmaps import CATEGORY_CODE, UNMAPPED, IdMaps, condition_label, ensure_platform
@@ -56,10 +57,10 @@ def _map_rows(ged_file: GedFile, maps: IdMaps) -> tuple[list[Mapped], list[dict]
         warnings.append({"kind": "user_version",
                          "detail": f"expected {EXPECTED_USER_VERSION}, got {ged_file.user_version}"})
     for r in ged_file.rows:
-        missing = []
+        missing = list(r.problems)
         if r.title is None or not r.title.strip():
             missing.append("title missing")
-        if r.platform_id is None:
+        if r.platform_id is None and "platform_id out of range" not in r.problems:
             missing.append("platform_id missing")
         if not r.uuid:
             missing.append("uuid missing")
@@ -311,6 +312,35 @@ def attach_work(conn: sqlite3.Connection, raw_title: str) -> int:
     return wid
 
 
+def _reattach(conn: sqlite3.Connection, copy_id: int, old: int | None, raw_title: str, now: int) -> int:
+    """The work for an unpinned game copy whose title may have changed (owner decision 2026-11-08).
+
+    If the new key would move the copy off a work that has no other copies (active or removed), the
+    old work's state comes along: with no alias for the new key the old work is retitled and gains
+    the alias; with an alias elsewhere the copy goes there and the old work is merged into it.
+    Otherwise this is plain alias lookup / creation (attach_work).
+    """
+    key = normalize(raw_title)[0]
+    alias = conn.execute("SELECT work_id FROM work_alias WHERE work_key=?", (key,)).fetchone()
+    target = alias[0] if alias else None
+    if old is None or target == old:
+        return attach_work(conn, raw_title)
+    others = conn.execute("SELECT COUNT(*) FROM copy WHERE work_id=? AND id<>?", (old, copy_id)).fetchone()[0]
+    if others:
+        return attach_work(conn, raw_title)
+    if target is None:
+        conn.execute("UPDATE work SET title=? WHERE id=?", (display_title(raw_title), old))
+        conn.execute("INSERT INTO work_alias (work_key, work_id) VALUES (?, ?)", (key, old))
+        return old
+    try:
+        merge(conn, target, old, now=now)
+    except CatalogError as e:
+        raise ImportFailure(e.status, e.code,
+                            f"{raw_title!r} joins an existing game, but merging its play state failed: "
+                            f"{e.detail}") from e
+    return target
+
+
 _NAMES = {"add": "added", "edit": "edited", "remove": "removed", "restore": "restored"}
 
 
@@ -330,14 +360,14 @@ def _apply_change(conn, c: dict, plat: int | None, now: int) -> None:
             (work, plat, m.category, m.raw_title, m.edition, m.condition_mask, m.country, sid,
              m.source_item_id, m.gameeye_platform_id, m.created_at, m.updated_at))
         return
-    cur = conn.execute("SELECT work_id, work_pinned FROM copy WHERE source='gameeye' AND "
+    cur = conn.execute("SELECT id, work_id, work_pinned FROM copy WHERE source='gameeye' AND "
                        "source_id=?", (sid,)).fetchone()
     if m.category != "game":
         wid, pinned = None, 0
     elif cur["work_pinned"] and cur["work_id"] is not None:
         wid, pinned = cur["work_id"], 1
     else:
-        wid, pinned = attach_work(conn, m.raw_title), 0
+        wid, pinned = _reattach(conn, cur["id"], cur["work_id"], m.raw_title, now), 0
     conn.execute(
         "UPDATE copy SET work_id=?, work_pinned=?, platform_id=?, category=?, raw_title=?,"
         " edition=?, condition_mask=?, country=?, source_item_id=?, source_platform_id=?,"

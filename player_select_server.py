@@ -42,8 +42,8 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from ps import idmaps
-from ps.catalog import CatalogError, ack_dup, catalog, merge, seed_persons, set_play_state, \
-    set_removed_reason, set_up_next, split
+from ps.catalog import INT64_MAX, CatalogError, ack_dup, catalog, is_int, merge, seed_persons, \
+    set_play_state, set_removed_reason, set_up_next, split
 from ps.db import Store, connect, migrate
 from pathlib import Path
 
@@ -60,7 +60,7 @@ ROUTES: list[tuple[str, str]] = (
        ("PUT", "/api/copy/<id>"), ("POST", "/api/work/merge"), ("POST", "/api/work/split"),
        ("POST", "/api/dup-ack"), ("POST", "/api/import/gameeye"), ("POST", "/api/import/<id>/apply")]
 )
-COPY_PATH = re.compile(r"^/api/copy/(\d+)$")
+COPY_PATH = re.compile(r"^/api/copy/([0-9]+)$", re.ASCII)
 APPLY_PATH = re.compile(r"^/api/import/([0-9]+)/apply$", re.ASCII)
 ERROR_CODES = {404: "not_found", 412: "precondition_failed", 413: "too_large",
                415: "unsupported_media_type"}
@@ -105,12 +105,16 @@ def etag_of(body: bytes) -> str:
 ETAG_TOKEN = re.compile(r'(?:W/)?"[^"]*"|\*')
 
 
+def strip_weak(tag: str) -> str:
+    return tag[2:] if tag.startswith("W/") else tag
+
+
 def none_match(header: str | None, etag: str) -> bool:
     """True if an If-None-Match value matches `etag` under weak comparison (W/"x" matches "x")."""
     if not header:
         return False
     for tok in ETAG_TOKEN.findall(header):
-        if tok == "*" or (tok[2:] if tok.startswith("W/") else tok) == etag:
+        if tok == "*" or strip_weak(tok) == etag:
             return True
     return False
 
@@ -134,6 +138,14 @@ def parse_multipart(content_type: str, body: bytes) -> dict[str, bytes]:
         raise
     except Exception as e:  # noqa: BLE001 - the email package has several ways to object
         raise ValueError(f"unparsable multipart body: {e}") from e
+
+
+def path_id(m: re.Match, what: str) -> int:
+    """The id in a matched route path; one SQLite cannot hold (beyond int64) names nothing: 404."""
+    n = int(m.group(1))
+    if n > INT64_MAX:
+        raise CatalogError(404, "not_found", f"unknown {what}")
+    return n
 
 
 def config_script(cfg: dict) -> str:
@@ -195,11 +207,15 @@ def make_handler(app: App):
             self.json(status, {"error": code, "detail": detail}, headers)
 
         def if_match_ok(self, current: str) -> bool:
-            """No If-Match header: always fine. Otherwise strong comparison; `*` matches."""
+            """No If-Match header: always fine. Otherwise compare with any W/ prefix removed on both
+            sides; `*` matches. RFC 9110 says If-Match uses strong comparison, but a CDN (Cloudflare by
+            default) turns the strong ETag into W/"..." for compressed responses and the page echoes that
+            back, so strict comparison would fail every save behind it."""
             header = self.headers.get("If-Match")
             if header is None:
                 return True
-            return any(tok == "*" or tok == current for tok in ETAG_TOKEN.findall(header))
+            return any(tok == "*" or strip_weak(tok) == strip_weak(current)
+                       for tok in ETAG_TOKEN.findall(header))
 
         def drain(self) -> None:
             """Drop a small request body so an early error reply isn't a reset connection."""
@@ -218,7 +234,7 @@ def make_handler(app: App):
                 self.error(415, "unsupported_media_type", "Content-Type must be application/json")
                 return None
             raw_len = self.headers.get("Content-Length")
-            if raw_len is None or not raw_len.strip().isdigit():
+            if raw_len is None or not (raw_len.strip().isascii() and raw_len.strip().isdigit()):
                 self.error(400, "bad_request", "Content-Length is required")
                 return None
             n = int(raw_len)
@@ -294,8 +310,8 @@ def make_handler(app: App):
                 note = b.get("note", ...)
                 if note is ...:
                     row = conn.execute("SELECT note FROM play_state WHERE person_id=? AND work_id=?",
-                                       (person, work)).fetchone() if isinstance(person, int) \
-                        and isinstance(work, int) else None
+                                       (person, work)).fetchone() if is_int(person) \
+                        and is_int(work) else None
                     note = row["note"] if row else None
                 previous = set_play_state(conn, person, work, b.get("status"), note, now=int(time.time()))
                 row = conn.execute("SELECT note FROM play_state WHERE person_id=? AND work_id=?",
@@ -328,10 +344,10 @@ def make_handler(app: App):
                 return self.import_stage()
             a = APPLY_PATH.match(p)
             if method == "POST" and a:
-                routes[("POST", p)] = lambda b: self.import_apply(int(a.group(1)), b)
+                routes[("POST", p)] = lambda b: self.import_apply(path_id(a, "import run"), b)
             m = COPY_PATH.match(p)
             if method == "PUT" and m:
-                routes[("PUT", p)] = lambda b: self.copy_put(int(m.group(1)), b)
+                routes[("PUT", p)] = lambda b: self.copy_put(path_id(m, "copy"), b)
             fn = routes.get((method, p))
             if fn is None:
                 self.drain()
@@ -410,6 +426,7 @@ def load_persons(path: str | None) -> list[dict]:
 
 
 def main() -> None:
+    os.umask(0o077)  # the database, its WAL files and staged uploads hold personal data: owner-only
     here = os.path.dirname(os.path.abspath(__file__))
     ap = argparse.ArgumentParser(description="Serve the Player Select console catalog.")
     ap.add_argument("--port", type=int, default=8486)
@@ -436,7 +453,8 @@ def main() -> None:
     maps = idmaps.load()
     with store.write() as c:
         idmaps.sync_platforms(c, maps)
-        seed_persons(c, persons)
+        for line in seed_persons(c, persons):
+            print(line, file=sys.stderr, flush=True)
     app = App(args.page, args.data, nav, store, maps)
     srv = ThreadingHTTPServer((args.bind, args.port), make_handler(app))
     print(f"Player Select on http://{args.bind}:{args.port}/ (data in {args.data})", file=sys.stderr, flush=True)

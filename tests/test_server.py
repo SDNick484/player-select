@@ -128,6 +128,24 @@ class TestCatalog(ServerCase):
         self.assertEqual(r.status, 200)
         self.put_state(person=a, work=w, status="")
 
+    def test_play_state_if_match_weak(self):
+        # Cloudflare weakens a strong ETag for compressed responses (W/"..."), and the page echoes it back:
+        # If-Match compares with the W/ prefix removed on both sides (a deliberate RFC 9110 deviation).
+        a, w = self.person(), self.work("Donkey Kong Bananza")
+        old = self.srv.get("/api/catalog").headers["etag"]
+        self.assertEqual(self.put_state(person=a, work=w, status="playing").status, 200)
+        r = self.put_state(person=a, work=w, status="finished", headers={"If-Match": "W/" + old})
+        self.assert_error(r, 412, "precondition_failed")
+        cur = self.srv.get("/api/catalog").headers["etag"]
+        r = self.put_state(person=a, work=w, status="finished", headers={"If-Match": "W/" + cur})
+        self.assertEqual(r.status, 200, r.text())
+        cur = r.headers["etag"]
+        r = self.put_state(person=a, work=w, status="backlog", headers={"If-Match": f'"zzz", W/{cur}'})
+        self.assertEqual(r.status, 200, r.text())
+        r = self.put_state(person=a, work=w, status="playing", headers={"If-Match": "*"})
+        self.assertEqual(r.status, 200, r.text())
+        self.put_state(person=a, work=w, status="")
+
     def test_unknown_person_404(self):
         self.assert_error(self.put_state(person=9999, work=self.work("Bloodborne"), status="playing"),
                           404, "not_found")
@@ -161,6 +179,28 @@ class TestBodies(ServerCase):
         self.assertIn(b" 400 ", out.split(b"\r\n")[0])
         out = raw_request(self.srv.port, head % b"Content-Length: -5\r\n")
         self.assertIn(b" 400 ", out.split(b"\r\n")[0])
+        # U+00B2 SUPERSCRIPT TWO: str.isdigit() says yes, int() says no (latin-1, as http.server decodes it)
+        out = raw_request(self.srv.port, head % "Content-Length: ²\r\n".encode("latin-1"))
+        self.assertIn(b" 400 ", out.split(b"\r\n")[0])
+        self.assertIn(b'"bad_request"', out)
+
+    def test_ids_beyond_int64(self):
+        big, neg = 2 ** 63, -(2 ** 63) - 1
+        cases = [("PUT", "/api/play-state", {"person": big, "work": 1, "status": "playing"}),
+                 ("PUT", "/api/play-state", {"person": 1, "work": neg, "status": "playing"}),
+                 ("PUT", "/api/up-next", {"person": big, "order": []}),
+                 ("PUT", "/api/up-next", {"person": 1, "order": [big]}),
+                 ("POST", "/api/work/merge", {"into": big, "from": 1}),
+                 ("POST", "/api/work/split", {"copy": big, "title": "x"}),
+                 ("POST", "/api/dup-ack", {"work": 1, "platform": big})]
+        for method, path, body in cases:
+            with self.subTest(path=path, body=body):
+                self.assert_error(self.srv.req(method, path, body), 400, "bad_request")
+        for path in (f"/api/copy/{big}", "/api/copy/" + "9" * 40):
+            with self.subTest(path=path):
+                self.assert_error(self.srv.put(path, {"removed_reason": "sold"}), 404, "not_found")
+        self.assert_error(self.srv.post(f"/api/import/{big}/apply", {}), 404, "not_found")
+        self.assertNotIn("Traceback", self.srv.log_text())
 
     def test_too_large_413(self):
         big = json.dumps({"note": "x" * (64 * 1024)}).encode()
@@ -290,9 +330,33 @@ class TestLifecycle(unittest.TestCase):
         finally:
             s.cleanup()
 
+    def test_persons_file_edit_applies_on_restart(self):
+        s = Server(persons=[{"name": "Player 1", "color": "#4c78a8"}]).start()
+        try:
+            self.assertEqual([p["name"] for p in s.get("/api/catalog").json()["persons"]], ["Player 1"])
+            s.stop()
+            s.persons_file.write_text(json.dumps(PERSONS), encoding="utf-8")
+            s.start()
+            got = [(p["name"], p["color"]) for p in s.get("/api/catalog").json()["persons"]]
+            self.assertEqual(got, [(p["name"], p["color"]) for p in PERSONS])
+            self.assertIn("persons: removed 'Player 1'", s.log_text())
+        finally:
+            s.cleanup()
+
     def test_data_dir_modes(self):
         with Server() as s:
             self.assertEqual((s.data / "imports").stat().st_mode & 0o777, 0o700)
+
+    def test_files_the_server_creates_are_private(self):
+        with Server(seed=False) as s:  # the server creates the data dir and the database itself
+            s.put("/api/play-state", {"person": s.get("/api/catalog").json()["persons"][0]["id"], "work": 1,
+                                      "status": "playing"})
+            self.assertEqual(s.data.stat().st_mode & 0o777, 0o700)
+            made = [p for p in s.data.glob("player_select.db*")]
+            self.assertTrue(made)
+            for p in made:
+                with self.subTest(file=p.name):
+                    self.assertEqual(p.stat().st_mode & 0o077, 0, oct(p.stat().st_mode))
 
     def test_restart_is_idempotent(self):
         s = Server().start()

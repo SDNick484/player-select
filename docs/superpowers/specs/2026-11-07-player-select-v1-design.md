@@ -112,8 +112,12 @@ player-select/
   per-request connection. `PRAGMA busy_timeout=5000`.
 - Migrations run at start-up: `migrations/NNN_*.sql` applied in order inside a transaction, tracked
   in `schema_version`.
-- Persons are seeded from `--persons` (JSON list of `{name, color}`) on start-up: inserted if missing
-  by name, never deleted. Names and colors are personal data and are not committed.
+- Persons are seeded from `--persons` (JSON list of `{name, color}`) on start-up. (amended 2026-11-08)
+  The file is the source: names are matched exactly; new names are inserted; names in the file get its
+  `color` and `sort` (= list index); a person not in the file is deleted only if they have no
+  `play_state` and no `up_next_order` rows (and no `account`), otherwise kept and sorted after the
+  file's names. One log line per person kept or removed; no data is ever lost. An absent file changes
+  nothing. Names and colors are personal data and are not committed.
 
 ## 5. Data model
 
@@ -270,6 +274,14 @@ V: Skyrim* (PS3, Switch); *Ocarina of Time* (N64, Switch 2 *[Foil Cover Art]*). 
 
 Work attachment on import: look up `work_key` in `work_alias`; if absent create `work(title = raw
 title without the bracket)` and the alias. Copies with `work_pinned = 1` are never reassigned.
+
+Retitles (amended 2026-11-08): when an unpinned game copy's `work_key` changes on import and its old
+work has no other copies (active or removed), the old work's state comes along. If the new key has no
+alias, the old work is kept, its title becomes the new display title and it gains the new key's alias
+(the old alias stays). If the new key already aliases another work, the copy is attached there and the
+old work is merged into it by the Merge rules below, in the same transaction; a merge refusal (merged
+note too long) fails the apply with 409 and the run stays staged. If the old work still has other
+copies, the copy is attached by plain lookup as above.
 
 - **Merge** (`into`, `from`): repoint `work_alias`, `copy`, `up_next_order`, `dup_ack`; merge
   `play_state` per person (keep the later `updated_at`; if both have notes, append the other note after

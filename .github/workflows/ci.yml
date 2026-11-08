@@ -27,11 +27,14 @@ jobs:
       fail-fast: false
       matrix:
         python-version: ["3.11", "3.12", "3.13", "3.14"]
+    env:
+      REQUIRE_SQLITE3: "1"  # the backup tests need the sqlite3 CLI and fail, not skip, without it
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: ${{ matrix.python-version }}
+      - run: sudo apt-get install -y sqlite3
       - name: Run the tests
         shell: bash
         run: |
@@ -74,8 +77,19 @@ jobs:
           python -m unittest discover -v -s tests/browser -p 'test_*.py' 2>&1 | tee page.log
           if grep -Ei '\.\.\. skipped|skipped=' page.log; then echo "::error::a test was skipped"; exit 1; fi
 
+  # install/alpine.sh run three times (and once refused) inside python:3.12-alpine, with apk, rc-*, wget and ip
+  # stubbed; then the installed server is started as the games user and asked for /healthz. Alpine is the primary
+  # target, so this runs on the real musl / BusyBox userland.
+  installer:
+    name: Alpine installer, run three times (python:3.12-alpine)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: docker run --rm -v "$PWD:/src:ro" python:3.12-alpine sh /src/tests/installer/check.sh
+
   lint:
-    name: Lint (shellcheck, py_compile)
+    name: Lint (shellcheck, py_compile, systemd-analyze)
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:

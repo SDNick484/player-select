@@ -3,7 +3,7 @@
 What it proves: on an empty server, staging the fixture backup and CSV shows the summary counts, the warnings and
 the changes grouped by operation, and Apply fills Games; re-staging the same backup says nothing changed; a backup
 that drops most copies keeps Apply disabled until the removals are confirmed; and a stale or expired staged run is
-explained inline with a way to stage again.
+explained inline with a way to stage again; and an upload over 32 MiB is refused in the page without a request.
 
 Set BROWSER_EXECUTABLE to use an installed Chrome, and REQUIRE_BROWSER=1 (CI does) to make a missing Playwright an
 error instead of a skip.
@@ -136,6 +136,41 @@ class Import(BrowserCase):
         self.assertTrue(page.is_visible("#gedFile"))
         self.assertEqual(page.locator("#applyBtn").count(), 0)
         self.assert_clean(allow=("HTTP 409", CHROME_HTTP_ERROR))
+
+    def put_file(self, page, sel, name, size):
+        """Give a file input a synthetic file of `size` bytes, made in the page (nothing is uploaded)."""
+        page.evaluate("""([sel, name, size]) => {
+            const dt = new DataTransfer();
+            dt.items.add(new File([new Uint8Array(size)], name));
+            const el = document.querySelector(sel);
+            el.files = dt.files;
+            el.dispatchEvent(new Event("change", { bubbles: true }));
+        }""", [sel, name, size])
+
+    def test_oversize_upload_is_refused_in_the_page(self):
+        self.serve(seed=False)
+        page = self.open(self.context(), "/import")
+        sent = []
+        page.on("request", lambda r: sent.append(r.url) if "/api/import" in r.url else None)
+        limit = 32 * 1024 * 1024
+        self.put_file(page, "#gedFile", "big.ged", limit + 1)
+        page.click("#stageBtn")
+        err = page.inner_text("#view-import .err")
+        self.assertIn("32 MiB", err)
+        self.assertFalse(page.is_disabled("#stageBtn"), "another file can be picked and staged")
+        # Together over the limit: the backup and the CSV are one upload.
+        self.put_file(page, "#gedFile", "half.ged", limit // 2)
+        self.put_file(page, "#csvFile", "half.csv", limit // 2 + 1)
+        self.assertEqual(page.locator("#view-import .err").count(), 0, "a new pick clears the message")
+        page.click("#stageBtn")
+        self.assertIn("32 MiB", page.inner_text("#view-import .err"))
+        self.assertEqual(sent, [], "nothing was sent")
+        # A file within the limit still goes to the server.
+        self.put_file(page, "#csvFile", "small.csv", 10)
+        with page.expect_response(STAGE) as resp:
+            page.click("#stageBtn")
+        self.assertEqual(resp.value.status, 400)  # 16 MiB of zeros is not a zip: the server's own answer
+        self.assert_clean(allow=("HTTP 400", CHROME_HTTP_ERROR))
 
     def test_stage_error_is_inline(self):
         self.serve(seed=False)
