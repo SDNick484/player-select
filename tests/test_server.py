@@ -128,6 +128,24 @@ class TestCatalog(ServerCase):
         self.assertEqual(r.status, 200)
         self.put_state(person=a, work=w, status="")
 
+    def test_play_state_if_match_weak(self):
+        # Cloudflare weakens a strong ETag for compressed responses (W/"..."), and the page echoes it back:
+        # If-Match compares with the W/ prefix removed on both sides (a deliberate RFC 9110 deviation).
+        a, w = self.person(), self.work("Donkey Kong Bananza")
+        old = self.srv.get("/api/catalog").headers["etag"]
+        self.assertEqual(self.put_state(person=a, work=w, status="playing").status, 200)
+        r = self.put_state(person=a, work=w, status="finished", headers={"If-Match": "W/" + old})
+        self.assert_error(r, 412, "precondition_failed")
+        cur = self.srv.get("/api/catalog").headers["etag"]
+        r = self.put_state(person=a, work=w, status="finished", headers={"If-Match": "W/" + cur})
+        self.assertEqual(r.status, 200, r.text())
+        cur = r.headers["etag"]
+        r = self.put_state(person=a, work=w, status="backlog", headers={"If-Match": f'"zzz", W/{cur}'})
+        self.assertEqual(r.status, 200, r.text())
+        r = self.put_state(person=a, work=w, status="playing", headers={"If-Match": "*"})
+        self.assertEqual(r.status, 200, r.text())
+        self.put_state(person=a, work=w, status="")
+
     def test_unknown_person_404(self):
         self.assert_error(self.put_state(person=9999, work=self.work("Bloodborne"), status="playing"),
                           404, "not_found")

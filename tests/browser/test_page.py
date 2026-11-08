@@ -146,6 +146,41 @@ class PageSmoke(BrowserCase):
         self.assertEqual(page.input_value(f'select.status[data-work="{dk}"]'), "playing")
         self.assert_clean(allow=("HTTP 412", CHROME_HTTP_ERROR))
 
+    def test_status_save_works_behind_a_proxy_that_weakens_etags(self):
+        # Cloudflare (Respect Strong ETags off, the default) serves the catalog's ETag as W/"..." to visitors
+        # that accept gzip; the page sends that value back in If-Match and the save must still apply.
+        self.serve()
+        cat = self.catalog()
+        bb = work_id(cat, "Bloodborne")
+        a = cat["persons"][0]["id"]
+        ctx = self.context()
+        seen = []
+
+        def weaken(route):
+            resp = route.fetch()
+            headers = dict(resp.headers)
+            if "etag" in headers and not headers["etag"].startswith("W/"):
+                headers["etag"] = "W/" + headers["etag"]
+            route.fulfill(response=resp, headers=headers)
+        ctx.route("**/api/catalog", weaken)
+        ctx.route("**/api/play-state", weaken)
+        page = self.open(ctx, "/games")
+        page.on("request", lambda r: seen.append(r.headers.get("if-match")) if r.url.endswith("/api/play-state") else None)
+        statuses = []
+        page.on("response", lambda r: statuses.append(r.status) if r.url.endswith("/api/play-state") else None)
+        page.select_option(f'select.status[data-work="{bb}"]', "finished")
+        page.wait_for_function("document.querySelector('select.status[data-work=\"%d\"]').dataset.saved === '1'" % bb)
+        self.assertEqual(statuses, [200])
+        self.assertTrue(seen and seen[0].startswith("W/"), seen)
+        # A second save sends the weak ETag from the first save's response.
+        page.select_option(f'select.status[data-work="{bb}"]', "playing")
+        page.wait_for_function("document.querySelector('select.status[data-work=\"%d\"]').value === 'playing'"
+                               " && document.querySelector('select.status[data-work=\"%d\"]').dataset.saved === '1'" % (bb, bb))
+        self.assertEqual(statuses, [200, 200])
+        self.assertEqual([(s["person"], s["work"], s["status"]) for s in self.catalog()["play_state"]],
+                         [(a, bb, "playing")])
+        self.assert_clean()
+
     def test_status_select_keeps_keyboard_focus_after_saving(self):
         self.serve()
         cat = self.catalog()

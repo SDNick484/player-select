@@ -105,12 +105,16 @@ def etag_of(body: bytes) -> str:
 ETAG_TOKEN = re.compile(r'(?:W/)?"[^"]*"|\*')
 
 
+def strip_weak(tag: str) -> str:
+    return tag[2:] if tag.startswith("W/") else tag
+
+
 def none_match(header: str | None, etag: str) -> bool:
     """True if an If-None-Match value matches `etag` under weak comparison (W/"x" matches "x")."""
     if not header:
         return False
     for tok in ETAG_TOKEN.findall(header):
-        if tok == "*" or (tok[2:] if tok.startswith("W/") else tok) == etag:
+        if tok == "*" or strip_weak(tok) == etag:
             return True
     return False
 
@@ -195,11 +199,15 @@ def make_handler(app: App):
             self.json(status, {"error": code, "detail": detail}, headers)
 
         def if_match_ok(self, current: str) -> bool:
-            """No If-Match header: always fine. Otherwise strong comparison; `*` matches."""
+            """No If-Match header: always fine. Otherwise compare with any W/ prefix removed on both
+            sides; `*` matches. RFC 9110 says If-Match uses strong comparison, but a CDN (Cloudflare by
+            default) turns the strong ETag into W/"..." for compressed responses and the page echoes that
+            back, so strict comparison would fail every save behind it."""
             header = self.headers.get("If-Match")
             if header is None:
                 return True
-            return any(tok == "*" or tok == current for tok in ETAG_TOKEN.findall(header))
+            return any(tok == "*" or strip_weak(tok) == strip_weak(current)
+                       for tok in ETAG_TOKEN.findall(header))
 
         def drain(self) -> None:
             """Drop a small request body so an early error reply isn't a reset connection."""

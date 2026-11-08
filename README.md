@@ -160,6 +160,14 @@ Every response carries `X-PlayerSelect-Server: 1` and `X-PlayerSelect-Api: 1`. R
 
 **ETags.** `GET /api/catalog` sends an `ETag`. `PUT /api/play-state` may send `If-Match` with an ETag from an earlier GET; if the catalog has changed since, the server answers `412` with `precondition_failed` and writes nothing. A PUT without `If-Match` always applies. The page sends `If-Match` with the last catalog ETag on every play-state PUT and, on a `412`, reloads the catalog and retries once.
 
+`If-Match` is compared with any `W/` prefix removed on both sides (`*` matches anything). This is a deliberate deviation from RFC 9110, which asks for strong comparison: a CDN such as Cloudflare (with "Respect Strong ETags" off, the default) turns the strong ETag into `W/"…"` for visitors that accept gzip or brotli, and the page echoes that value back, so strict comparison would refuse every save. After deploying behind a proxy, check what it sends:
+
+```sh
+curl -sI -H 'Accept-Encoding: gzip' https://games.example.com/api/catalog
+```
+
+A `W/"…"` ETag there is fine. A missing `ETag` header is not: without it the page cannot detect concurrent changes.
+
 **Errors.** Every 4xx and 5xx body is JSON, including the ones the standard library produces:
 
 ```json
