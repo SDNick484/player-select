@@ -53,7 +53,7 @@ def _catalog(conn: sqlite3.Connection) -> dict:
     copies = []
     for r in conn.execute(
             "SELECT id, work_id, platform_id, category, form, raw_title, edition, condition_mask,"
-            " country, source, source_id, created_at, removed_at, removed_reason"
+            " country, source, source_id, created_at, updated_at, removed_at, removed_reason"
             " FROM copy ORDER BY id"):
         d = dict(r)
         d["condition"] = condition_label(d["condition_mask"])

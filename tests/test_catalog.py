@@ -82,7 +82,7 @@ class CatalogReadTest(CatBase):
         self.assertEqual(set(bb[0]), {"id", "work_id", "platform_id", "category", "form",
                                       "raw_title", "edition", "condition_mask", "condition",
                                       "country", "source", "source_id", "created_at",
-                                      "removed_at", "removed_reason"})
+                                      "updated_at", "removed_at", "removed_reason"})
 
     def test_meta_types(self):
         meta = self.cat()["meta"]

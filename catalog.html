@@ -6,7 +6,7 @@
   --bg: #e9ecf2; --surface: #ffffff; --ink: #161b33; --muted: #5b6278; --line: #cdd2de; --hover: #f3f5fa;
   --marquee: #ffc629; --marquee-ink: #161b33; --marquee-line: #e0a800;
   --focus: #2f5fd0; --err: #b3261e; --err-bg: #fdecea; --pressed: #161b33; --pressed-ink: #ffffff;
-  --player: #8b8f99;
+  --player: #8b8f99; --ok: #2f7d32;
   --f-playstation: #2e6db4; --f-xbox: #2f8f3a; --f-nintendo: #d3352b; --f-sega: #6a4fb3; --f-atari: #b5651d;
   --f-nec: #c77c02; --f-pc: #59606e; --f-media: #8a6d3b; --f-other: #8b8f99;
   --st-backlog: #e7eaf3; --st-up_next: #fff1c2; --st-playing: #dcebff; --st-finished: #dff3e2;
@@ -15,21 +15,21 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --bg: #12162a; --surface: #1b2038; --ink: #e8ebf5; --muted: #9aa1b8; --line: #2c3352; --hover: #222846;
-    --focus: #8fb0ff; --err: #ffb4ab; --err-bg: #3b1d1b; --pressed: #e8ebf5; --pressed-ink: #12162a;
+    --focus: #8fb0ff; --err: #ffb4ab; --err-bg: #3b1d1b; --pressed: #e8ebf5; --pressed-ink: #12162a; --ok: #8fd19e;
     --st-backlog: #262c48; --st-up_next: #4a3d10; --st-playing: #1d3557; --st-finished: #1e3b28;
     --st-abandoned: #3d2626; --st-not_for_me: #2a2d38;
   }
 }
 :root[data-theme="dark"] {
   --bg: #12162a; --surface: #1b2038; --ink: #e8ebf5; --muted: #9aa1b8; --line: #2c3352; --hover: #222846;
-  --focus: #8fb0ff; --err: #ffb4ab; --err-bg: #3b1d1b; --pressed: #e8ebf5; --pressed-ink: #12162a;
+  --focus: #8fb0ff; --err: #ffb4ab; --err-bg: #3b1d1b; --pressed: #e8ebf5; --pressed-ink: #12162a; --ok: #8fd19e;
   --st-backlog: #262c48; --st-up_next: #4a3d10; --st-playing: #1d3557; --st-finished: #1e3b28;
   --st-abandoned: #3d2626; --st-not_for_me: #2a2d38;
 }
 body { background: var(--bg); color: var(--ink); }
 * { box-sizing: border-box; }
 :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
-button, input, select { font: inherit; color: inherit; }
+button, input, select, textarea { font: inherit; color: inherit; }
 .num { font-variant-numeric: tabular-nums; }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
@@ -64,6 +64,7 @@ main { max-width: 1240px; margin: 0 auto; padding: 16px; }
 .btn { min-height: 36px; padding: 6px 12px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface);
   cursor: pointer; }
 .btn:disabled { opacity: .45; cursor: default; }
+a.btn { display: inline-flex; align-items: center; color: var(--ink); text-decoration: none; }
 #count { margin-left: auto; color: var(--muted); white-space: nowrap; }
 #filtersBtn { display: inline-flex; gap: 6px; align-items: center; }
 #filtersBtn::after { content: "▾"; font-size: 11px; color: var(--muted); }
@@ -119,7 +120,117 @@ select.status[data-saved="0"] { opacity: .6; }
 .empty { padding: 28px 16px; text-align: center; color: var(--muted); }
 .empty .btn { margin-top: 8px; }
 .banner { padding: 12px 14px; border-radius: 8px; background: var(--err-bg); color: var(--err); margin-bottom: 12px; }
-.placeholder { padding: 24px 16px; background: var(--surface); border: 1px dashed var(--line); border-radius: 8px; color: var(--muted); }
+.lede { margin: -4px 0 14px; color: var(--muted); max-width: 72ch; }
+.btn.sm { min-height: 30px; padding: 3px 10px; font-size: 13px; }
+.btn.primary { background: var(--pressed); color: var(--pressed-ink); border-color: var(--pressed); font-weight: 600; }
+.btn.danger { border-color: var(--err); color: var(--err); background: var(--surface); }
+.txt { min-height: 32px; min-width: 0; padding: 4px 8px; border: 1px solid var(--line); border-radius: 6px;
+  background: var(--surface); color: var(--ink); }
+.ok { color: var(--ok); font-weight: 600; }
+.op-add { --op: var(--f-xbox); } .op-edit { --op: var(--f-playstation); } .op-restore { --op: var(--f-sega); }
+.op-remove { --op: var(--err); }
+
+/* ---- row details (Games and Items) */
+.disclose { display: inline-flex; gap: 6px; align-items: baseline; margin: 0; padding: 0; border: 0; background: none;
+  font-weight: 600; text-align: left; cursor: pointer; overflow-wrap: anywhere; }
+.disclose::before { content: "▸"; color: var(--muted); font-size: 11px; }
+.disclose[aria-expanded="true"]::before { content: "▾"; }
+tbody tr.detail-row:hover { background: none; }
+tbody tr.detail-row > td { padding: 0; background: var(--bg); }
+.detail { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px 28px; padding: 14px 16px 16px;
+  border-left: 4px solid var(--marquee); }
+.detail h3 { margin: 0 0 8px; font-size: 13px; font-weight: 650; color: var(--muted); }
+.detail .wide { grid-column: 1 / -1; }
+.cplist { list-style: none; margin: 0 0 16px; padding: 0; display: grid; gap: 10px; }
+.cp-main { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; margin-bottom: 4px; }
+.cp.removed .cp-main > span:not(.tag) { color: var(--muted); }
+.inline-form { display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: center; padding: 10px; border: 1px dashed var(--line);
+  border-radius: 6px; background: var(--surface); }
+.inline-form label { width: 100%; font-size: 12.5px; color: var(--muted); }
+.inline-form .txt { flex: 1 1 200px; }
+.inline-form .fhint { width: 100%; margin: 0; }
+.pl { padding: 10px 0; border-top: 1px solid var(--line); }
+.pl:first-of-type { border-top: 0; padding-top: 0; }
+.pl-head { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 6px; }
+.pl-name { font-weight: 600; margin-right: auto; }
+.token.sm { min-width: 24px; height: 24px; padding: 0 5px; font-size: 11px; box-shadow: none; }
+textarea.note { display: block; width: 100%; min-height: 54px; resize: vertical; padding: 6px 8px; border: 1px solid var(--line);
+  border-radius: 6px; background: var(--surface); color: var(--ink); font: inherit; }
+textarea.note:disabled { opacity: .55; }
+.pl-foot { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; margin-top: 4px; font-size: 12.5px; }
+.pl-foot .btn { margin-left: auto; }
+.confirm { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; width: 100%; margin-top: 6px; padding: 6px 8px;
+  border-radius: 6px; background: var(--err-bg); color: var(--err); font-size: 12.5px; font-weight: 500; }
+.mergebox input { width: 100%; }
+.picks { display: grid; gap: 4px; margin-top: 6px; }
+.picks button { display: flex; flex-wrap: wrap; gap: 2px 8px; align-items: baseline; padding: 5px 9px; border: 1px solid var(--line);
+  border-radius: 6px; background: var(--surface); text-align: left; cursor: pointer; }
+.picks button small { color: var(--muted); }
+.picks button[aria-pressed="true"] { background: var(--pressed); color: var(--pressed-ink); border-color: var(--pressed); }
+.picks button[aria-pressed="true"] small { color: inherit; opacity: .75; }
+.mergego { display: grid; gap: 6px; margin-top: 10px; padding: 10px; border: 1px dashed var(--line); border-radius: 6px;
+  background: var(--surface); }
+.mergego p { margin: 0; }
+.mergego div { display: flex; flex-wrap: wrap; gap: 6px; }
+.facts { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 8px 18px; margin: 0; }
+.facts dt { font-size: 12px; color: var(--muted); }
+.facts dd { margin: 0; overflow-wrap: anywhere; }
+.reason { display: grid; gap: 3px; max-width: 260px; font-size: 12.5px; color: var(--muted); }
+
+/* ---- Up next: a numbered queue; the head of the line wears the marquee colour */
+.queue { list-style: none; margin: 0; padding: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; }
+.queue li { display: grid; grid-template-columns: 52px minmax(0, 1fr) auto; gap: 14px; align-items: center; padding: 12px 14px;
+  border-bottom: 1px solid var(--line); }
+.queue li:last-child { border-bottom: 0; }
+.pos { padding: 7px 0 6px; border-radius: 6px; text-align: center; color: var(--muted);
+  font: 900 26px/1 "Arial Narrow", "Roboto Condensed", "Helvetica Neue", system-ui, sans-serif; font-stretch: condensed; }
+.queue li:first-child .pos { background: var(--marquee); color: var(--marquee-ink); }
+.un-title { margin-bottom: 4px; font-weight: 650; font-size: 15px; overflow-wrap: anywhere; }
+.un-note { margin: 6px 0 0; color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
+.moves { display: flex; gap: 6px; }
+.msg { margin: 0 0 12px; padding: 10px 12px; border-radius: 8px; background: var(--surface); border: 1px solid var(--line); }
+
+/* ---- Duplicates */
+.dcopies { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; }
+td.act { text-align: right; }
+td.act a { display: block; margin-top: 6px; font-size: 12.5px; color: var(--muted); }
+
+/* ---- Import */
+.impform { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px 22px; align-items: end;
+  margin-bottom: 12px; padding: 16px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; }
+.field { display: grid; gap: 4px; min-width: 0; }
+.field label { font-weight: 600; }
+.field input[type="file"] { min-width: 0; max-width: 100%; }
+.field .fhint { margin: 0; }
+#impLast { margin: 0 0 12px; font-size: 13px; }
+.stats { display: flex; flex-wrap: wrap; margin: 0 0 12px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px;
+  overflow: hidden; }
+.stat { flex: 1 1 auto; padding: 8px 14px 9px; border-right: 1px solid var(--line); border-top: 3px solid var(--op, transparent);
+  white-space: nowrap; }
+.stat:last-child { border-right: 0; }
+.stat strong { margin-left: 4px; font-size: 18px; }
+.stat.zero { color: var(--muted); }
+.stat.zero strong { font-weight: 500; }
+.stats-label { flex-basis: 100%; padding: 6px 14px 0; font-size: 12.5px; color: var(--muted); }
+.warns { margin: 0 0 12px; padding: 10px 14px 10px 30px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; }
+.warns li + li { margin-top: 3px; }
+.warns strong { font-weight: 600; margin-right: 6px; }
+.guard { margin: 0 0 12px; padding: 12px 14px; border-radius: 8px; background: var(--err-bg); color: var(--err); }
+.guard p { margin: 0 0 8px; }
+.guard .check { font-weight: 600; }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 0 0 16px; }
+.actions .err { width: 100%; margin: 0; }
+.group { margin-bottom: 14px; }
+.group summary { cursor: pointer; }
+.group h3 { display: inline; margin: 0; padding-left: 8px; border-left: 4px solid var(--op); font-size: 14px; }
+.group ul { list-style: none; margin: 8px 0 0; padding: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; }
+.group li { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; padding: 6px 12px; border-bottom: 1px solid var(--line); }
+.group li:last-child { border-bottom: 0; }
+.group li .t { font-weight: 600; overflow-wrap: anywhere; }
+.outcome { margin: 0 0 16px; padding: 14px 16px; background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--ok);
+  border-radius: 8px; }
+.outcome h3 { margin: 0 0 8px; font-size: 16px; }
+.outcome p { margin: 0 0 10px; }
 
 /* ---- phone: rows become stacked cards */
 @media (max-width: 760px) {
@@ -141,6 +252,14 @@ select.status[data-saved="0"] { opacity: .6; }
   tr.copy-row { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 12px; }
   tr.copy-row td { margin: 0; }
   tr.copy-row td.title, tr.copy-row td.chipcell { grid-column: 1 / -1; }
+  tbody tr.detail-row { padding: 0; }
+  .detail { grid-template-columns: minmax(0, 1fr); padding: 12px; }
+  .queue li { grid-template-columns: 40px minmax(0, 1fr); gap: 10px; }
+  .moves { grid-column: 2; }
+  .pos { font-size: 21px; }
+  tr.dup-row { display: grid; grid-template-columns: minmax(0, 1fr); }
+  td.act { text-align: left; }
+  .stat { padding: 6px 10px 7px; }
 }
 @media (prefers-reduced-motion: no-preference) {
   select.status, .seg button { transition: background-color .12s ease; }
@@ -177,14 +296,27 @@ select.status[data-saved="0"] { opacity: .6; }
   </div>
   <section id="view-games" class="view" aria-label="Games" hidden></section>
   <section id="view-items" class="view" aria-label="Items" hidden></section>
-  <section id="view-up-next" class="view" aria-label="Up next" hidden>
-    <h2>Up next</h2><div class="placeholder">The ordered Up next list arrives in the next update.</div>
-  </section>
-  <section id="view-duplicates" class="view" aria-label="Duplicates" hidden>
-    <h2>Duplicates</h2><div class="placeholder">Duplicate review arrives in the next update.</div>
-  </section>
+  <section id="view-up-next" class="view" aria-label="Up next" hidden></section>
+  <section id="view-duplicates" class="view" aria-label="Duplicates" hidden></section>
   <section id="view-import" class="view" aria-label="Import" hidden>
-    <h2>Import</h2><div class="placeholder">Uploading a GameEye backup arrives in the next update.</div>
+    <h2>Import from GameEye</h2>
+    <p class="lede">Stage a GameEye backup to see what it would change. Nothing changes until you apply it.</p>
+    <!-- Static, so a picked file survives re-renders; only #impResult is redrawn. -->
+    <form id="impForm" class="impform">
+      <div class="field">
+        <label for="gedFile">Backup file (.ged)</label>
+        <input type="file" id="gedFile" accept=".ged,application/zip" aria-describedby="gedHint">
+        <p class="fhint" id="gedHint">Required. The import key for every copy.</p>
+      </div>
+      <div class="field">
+        <label for="csvFile">CSV export (optional)</label>
+        <input type="file" id="csvFile" accept=".csv,text/csv" aria-describedby="csvHint">
+        <p class="fhint" id="csvHint">Adds publisher, genre, Metacritic and prices.</p>
+      </div>
+      <div class="field"><button type="submit" class="btn primary" id="stageBtn" disabled>Stage import</button></div>
+    </form>
+    <p id="impLast" class="muted"></p>
+    <div id="impResult"></div>
   </section>
 </main>
 
@@ -233,7 +365,18 @@ const day = (t) => (t ? new Date(t * 1000).toISOString().slice(0, 10) : "");
 
 // ---------------------------------------------------------------- state
 const S = { cat: null, etag: null, person: null, view: "games", f: null,
-            ix: null, pending: new Map(), rowErr: null, queue: Promise.resolve(), pickQ: "" };
+            ix: null, pending: new Map(), queue: Promise.resolve(), pickQ: "",
+            open: new Set(),      // expanded row details: "w<work id>" (Games), "c<copy id>" (Items)
+            drafts: new Map(),    // "person:work" -> unsaved note text
+            msgs: new Map(),      // "person:work" -> {err} | {ok} beside a detail's player block
+            confirm: null,        // {key: "person:work", where: "row" | "detail"}: clearing a status that has a note
+            split: new Map(),     // copy id -> title draft while its split form is open
+            mergeQ: new Map(), mergePick: new Map(),  // work id -> merge search text / picked target work
+            actErr: new Map(),    // detail key -> error from a merge, split or removal reason
+            unMsg: null, dupErr: null, refocus: null,
+            imp: { phase: "idle" }, impHtml: null };
+const NOTE_MAX = 2000;
+const REASONS = [["sold", "Sold"], ["traded", "Traded"], ["lost", "Lost"], ["gifted", "Gifted"], ["mistake", "Added by mistake"]];
 
 // Lookups rebuilt whenever the catalog arrives.
 function index(cat) {
@@ -252,17 +395,22 @@ function index(cat) {
     (m.genre || []).forEach((g) => genres.set(g, (genres.get(g) || 0) + 1));
     if (m.publisher) pubs.set(m.publisher, (pubs.get(m.publisher) || 0) + 1);
   }
-  return { plat, works, byWork, genres, pubs,
+  return { plat, works, byWork, genres, pubs, copy: new Map(cat.copies.map((c) => [c.id, c])),
            platUsed: used((c) => c.platform_id), famUsed: used((c) => (plat.get(c.platform_id) || {}).family || "other"),
            catUsed: used((c) => c.category), condUsed: used((c) => c.condition), formUsed: used((c) => c.form) };
 }
 const metaOf = (c) => S.cat.meta[String(c.id)] || {};
-// (person, work) -> status, rebuilt when the catalog or a status changes.
-let stMap = null;
-function statusOf(work) {
-  if (!stMap) stMap = new Map(S.cat.play_state.map((s) => [`${s.person}:${s.work}`, s.status]));
-  return stMap.get(`${S.person}:${work}`) || "";
+// (person, work) -> play_state row, rebuilt when the catalog or a status changes.
+let psMap = null;
+function psRow(work, person = S.person) {
+  if (!psMap) psMap = new Map(S.cat.play_state.map((s) => [`${s.person}:${s.work}`, s]));
+  return psMap.get(`${person}:${work}`) || null;
 }
+const statusOf = (work, person = S.person) => (psRow(work, person) || {}).status || "";
+const noteOf = (work, person = S.person) => (psRow(work, person) || {}).note || "";
+const personName = (id) => (S.cat.persons.find((p) => p.id === id) || {}).name || "";
+const safeColor = (c) => (/^#[0-9a-f]{3,8}$/i.test(c || "") ? c : "#8b8f99");
+const chars = (s) => [...s].length;  // code points, as the server counts them
 
 // ---------------------------------------------------------------- filters (SBT's plumbing)
 const DEFAULT_F = {
@@ -385,21 +533,34 @@ function chipHtml(c, matched) {
   const title = [p ? p.name : "", c.condition, c.edition, c.removed_at != null ? "removed" : ""].filter(Boolean).join(", ");
   return `<span class="chip${matched ? "" : " dim"}${c.removed_at != null ? " gone" : ""}" style="--fam:var(--f-${esc(fam)})" title="${esc(title)}">${esc(label)}</span>`;
 }
-function statusSelect(work, title) {
-  const pk = `${S.person}:${work}`;
+function statusSelect(work, title, person = S.person, inDetail = false) {
+  const pk = `${person}:${work}`;
   const pend = S.pending.has(pk);
-  const cur = pend ? S.pending.get(pk).status : statusOf(work);  // a save in flight shows its value until it lands
-  const who = (S.cat.persons.find((p) => p.id === S.person) || {}).name || "";
+  const cur = pend ? S.pending.get(pk).status : statusOf(work, person);  // a save in flight shows its value until it lands
   const opts = [["", "—"], ...STATUSES].map(([k, l]) => `<option value="${k}"${k === cur ? " selected" : ""}>${esc(l)}</option>`).join("");
-  return `<select class="status" data-work="${work}" data-saved="${pend ? 0 : 1}" style="${cur ? `--st:var(--st-${cur})` : ""}" aria-label="${esc(`Status for ${who}: ${title}`)}">${opts}</select>`;
+  const ids = inDetail ? `data-dwork="${work}" data-person="${person}"` : `data-work="${work}"`;
+  return `<select class="status" ${ids} data-saved="${pend ? 0 : 1}" style="${cur ? `--st:var(--st-${cur})` : ""}" aria-label="${esc(`Status for ${personName(person)}: ${title}`)}">${opts}</select>`;
 }
+// Clearing a status deletes the play_state row and its note with it, so a status with a note asks first.
+function confirmHtml(key, where) {
+  if (!S.confirm || S.confirm.key !== key || S.confirm.where !== where) return "";
+  return `<span class="confirm" role="alert">This also deletes the note.
+    <button type="button" class="btn sm danger" data-clearyes="${key}">Clear status and note</button>
+    <button type="button" class="btn sm" data-clearno="${key}">Keep it</button></span>`;
+}
+const errHtml = (msg) => (msg ? `<span class="err" role="alert">${esc(msg)}</span>` : "");
 function emptyHtml(noun) {
+  if (!S.cat.copies.length) return `<div class="empty">The catalog is empty.<br><a href="/import">Import a GameEye backup</a> to fill it.</div>`;
   return `<div class="empty">No ${noun} match these filters.<br><button type="button" class="btn" data-clear>Clear filters</button></div>`;
 }
 function setCount(n, total, noun) {
   const word = (k) => `${noun}${k === 1 ? "" : "s"}`;
   $("count").textContent = n === total ? `${n.toLocaleString()} ${word(n)}` : `${n.toLocaleString()} of ${total.toLocaleString()} ${word(total)}`;
 }
+const discloseHtml = (key, label) =>
+  `<button type="button" class="disclose" data-disc="${key}" aria-expanded="${S.open.has(key)}" aria-controls="d-${key}">${label}</button>`;
+const chipOrder = (c) => [shortName(S.ix.plat.get(c.platform_id)), COND_ORDER.indexOf(c.condition), c.id];
+const byChip = (a, b) => { const x = chipOrder(a), y = chipOrder(b); return byTitle(x[0], y[0]) || x[1] - y[1] || x[2] - y[2]; };
 
 function renderGames() {
   const f = S.f, terms = termsOf(f.q);
@@ -419,21 +580,89 @@ function renderGames() {
   const body = rows.map(({ w, shown, hits }) => {
     const genres = [...new Set(shown.flatMap((c) => metaOf(c).genre || []))];
     const mcs = shown.map((c) => metaOf(c).metacritic).filter((x) => x != null);
-    const order = (c) => [shortName(S.ix.plat.get(c.platform_id)), COND_ORDER.indexOf(c.condition), c.id];
-    const chips = [...shown].sort((a, b) => { const x = order(a), y = order(b); return byTitle(x[0], y[0]) || x[1] - y[1] || x[2] - y[2]; })
-      .map((c) => chipHtml(c, hits.has(c.id))).join("");
+    const chips = [...shown].sort(byChip).map((c) => chipHtml(c, hits.has(c.id))).join("");
     const gone = shown.every((c) => c.removed_at != null);
-    const err = S.rowErr && S.rowErr.work === w.id ? `<span class="err" role="alert">${esc(S.rowErr.msg)}</span>` : "";
-    return `<tr class="work-row${gone ? " removed" : ""}" data-work="${w.id}">
-      <td class="title" data-k="Title">${esc(w.title)}</td>
+    const key = `${S.person}:${w.id}`;
+    const row = `<tr class="work-row${gone ? " removed" : ""}" data-work="${w.id}">
+      <td class="title" data-k="Title">${discloseHtml(`w${w.id}`, esc(w.title))}</td>
       <td class="chipcell" data-k="Copies"><div class="chips">${chips}</div></td>
-      <td class="st" data-k="Status">${statusSelect(w.id, w.title)}${err}</td>
+      <td class="st" data-k="Status">${statusSelect(w.id, w.title)}${confirmHtml(key, "row")}${errHtml((S.msgs.get(key) || {}).err)}</td>
       <td data-k="Genre">${esc(genres.join(", "))}</td>
       <td class="r num" data-k="Metacritic">${mcs.length ? Math.max(...mcs) : ""}</td></tr>`;
+    return row + (S.open.has(`w${w.id}`) ? workDetail(w, shown) : "");
   }).join("");
   $("view-games").innerHTML = `<div class="tablewrap"><table>
     <thead><tr><th>Title</th><th>Copies</th><th>Status</th><th>Genre</th><th class="r">Metacritic</th></tr></thead>
     <tbody>${body}</tbody></table></div>`;
+}
+
+// ---- Games row detail: copies (split), merge, every player's status and note
+function workDetail(w, shown) {
+  const copies = [...shown].sort(byChip).map((c) => {
+    const rm = c.removed_at != null;
+    const label = [shortName(S.ix.plat.get(c.platform_id)), c.condition, c.edition].filter(Boolean).join(" · ");
+    const form = S.split.has(c.id) ? `<div class="inline-form">
+        <label for="split-${c.id}">New title for this copy</label>
+        <input type="text" class="txt" id="split-${c.id}" data-splitt="${c.id}" maxlength="300" value="${esc(S.split.get(c.id))}">
+        <button type="button" class="btn sm primary" data-splitgo="${c.id}">Split out</button>
+        <button type="button" class="btn sm" data-splitno="${c.id}">Cancel</button>
+        <p class="fhint">The copy gets its own row in Games, and later imports leave it there.</p>
+        ${errHtml(S.actErr.get(`s${c.id}`))}</div>`
+      : `<button type="button" class="btn sm" data-split="${c.id}" aria-label="${esc(`Split this copy out: ${label}`)}">Split this copy out</button>`;
+    return `<li class="cp${rm ? " removed" : ""}"><div class="cp-main">${chipHtml(c, true)}
+      <span class="muted num">Added ${day(c.created_at) || "?"}</span>${rm ? `<span class="tag">Removed${c.removed_reason ? ": " + esc(c.removed_reason) : ""}</span>` : ""}</div>${form}</li>`;
+  }).join("");
+  const players = S.cat.persons.map((p) => playerBlock(w, p)).join("");
+  const q = S.mergeQ.get(w.id) || "";
+  return `<tr class="detail-row" data-detail="w${w.id}" id="d-w${w.id}"><td colspan="5"><div class="detail">
+    <div>
+      <h3>Copies</h3><ul class="cplist">${copies}</ul>
+      <div class="mergebox"><h3><label for="merge-${w.id}">Merge into another game</label></h3>
+        <input type="search" class="txt" id="merge-${w.id}" data-mergeq="${w.id}" value="${esc(q)}" placeholder="Search titles" autocomplete="off" aria-describedby="picks-${w.id}">
+        <div id="picks-${w.id}">${mergePicks(w)}${mergeConfirm(w)}</div></div>
+    </div>
+    <div><h3>Players</h3>${players}</div>
+  </div></td></tr>`;
+}
+function playerBlock(w, p) {
+  const key = `${p.id}:${w.id}`;
+  const pend = S.pending.get(key);
+  const has = !!(pend ? pend.status : statusOf(w.id, p.id));
+  const text = S.drafts.has(key) ? S.drafts.get(key) : noteOf(w.id, p.id);
+  const n = chars(text);
+  const i = S.cat.persons.indexOf(p);
+  const m = S.msgs.get(key) || {};
+  return `<div class="pl">
+    <div class="pl-head"><span class="token sm" style="background:${safeColor(p.color)}" aria-hidden="true">P${i + 1}</span>
+      <span class="pl-name">${esc(p.name)}</span>${statusSelect(w.id, w.title, p.id, true)}${confirmHtml(key, "detail")}</div>
+    <label class="sr" for="note-${key}">${esc(`Note for ${p.name}: ${w.title}`)}</label>
+    <textarea class="note" id="note-${key}" data-note="${key}" rows="2" placeholder="${has ? "Add a note" : ""}"${has ? "" : " disabled"}
+      aria-describedby="cnt-${key}">${esc(text)}</textarea>
+    <div class="pl-foot">${has ? `<span class="num${n > NOTE_MAX ? " err" : " muted"}" id="cnt-${key}">${n} / ${NOTE_MAX}</span>`
+        : `<span class="muted" id="cnt-${key}">Set a status to add a note.</span>`}
+      ${m.ok ? `<span class="ok" role="status">${esc(m.ok)}</span>` : ""}
+      <button type="button" class="btn sm" data-savenote="${key}"${has && n <= NOTE_MAX ? "" : " disabled"}>Save note</button>
+      ${errHtml(m.err)}</div>
+  </div>`;
+}
+function mergePicks(w) {
+  const terms = termsOf(S.mergeQ.get(w.id) || "");
+  if (!terms.length) return `<p class="fhint">Type part of the other game's title. This game's copies, statuses and notes move there.</p>`;
+  const list = S.cat.works.filter((x) => x.id !== w.id && S.ix.byWork.has(x.id) && terms.every((t) => x.title.toLowerCase().includes(t)))
+    .sort((a, b) => byTitle(a.title, b.title) || a.id - b.id);
+  if (!list.length) return `<p class="fhint">No other game matches.</p>`;
+  const pick = S.mergePick.get(w.id);
+  return `<div class="picks" role="group" aria-label="Games to merge into">${list.slice(0, 8).map((x) => {
+    const plats = [...new Set(S.ix.byWork.get(x.id).filter((c) => c.removed_at == null).map((c) => shortName(S.ix.plat.get(c.platform_id))))];
+    return `<button type="button" data-mergepick="${x.id}" data-mfrom="${w.id}" aria-pressed="${pick === x.id}"><span>${esc(x.title)}</span><small>${esc(plats.join(", "))}</small></button>`;
+  }).join("")}</div>${list.length > 8 ? `<p class="fhint">${list.length - 8} more. Type more of the title.</p>` : ""}`;
+}
+function mergeConfirm(w) {
+  const into = S.ix.works.get(S.mergePick.get(w.id));
+  if (!into) return errHtml(S.actErr.get(`m${w.id}`));
+  return `<div class="mergego"><p>Merge “${esc(w.title)}” into “${esc(into.title)}”? Its copies, statuses and notes move there, and “${esc(w.title)}” goes away.</p>
+    <div><button type="button" class="btn sm primary" data-mergego="${w.id}">Merge</button>
+    <button type="button" class="btn sm" data-mergeno="${w.id}">Cancel</button></div>${errHtml(S.actErr.get(`m${w.id}`))}</div>`;
 }
 
 function renderItems() {
@@ -450,18 +679,139 @@ function renderItems() {
     const rm = c.removed_at != null;
     const tag = rm ? `<span class="tag">Removed${c.removed_reason ? ": " + esc(c.removed_reason) : ""}</span>` : "";
     return `<tr class="copy-row${rm ? " removed" : ""}" data-copy="${c.id}">
-      <td class="title" data-k="Title">${esc(c.raw_title)}${tag}</td>
+      <td class="title" data-k="Title">${discloseHtml(`c${c.id}`, esc(c.raw_title))}${tag}</td>
       <td class="chipcell" data-k="Platform"><span class="chip" style="--fam:var(--f-${esc((p && p.family) || "other")})" title="${esc(p ? p.name : "")}">${esc(p ? p.name : "?")}</span></td>
       <td data-k="Category">${esc(CAT_LABEL[c.category] || c.category)}</td>
       <td data-k="Condition">${esc(c.condition)}</td>
       <td data-k="Edition">${esc(c.edition || "")}</td>
       <td class="muted" data-k="Country" title="GameEye country ID">${esc(c.country ?? "")}</td>
       <td class="r num" data-k="CIB value">${m.price_cib != null ? usd.format(m.price_cib) : ""}</td>
-      <td class="num" data-k="Added">${day(c.created_at)}</td></tr>`;
+      <td class="num" data-k="Added">${day(c.created_at)}</td></tr>` + (S.open.has(`c${c.id}`) ? copyDetail(c, p) : "");
   }).join("");
   $("view-items").innerHTML = `<div class="tablewrap"><table>
     <thead><tr><th>Title</th><th>Platform</th><th>Category</th><th>Condition</th><th>Edition</th><th>Country</th>
     <th class="r">CIB value</th><th>Added</th></tr></thead><tbody>${body}</tbody></table></div>`;
+}
+function copyDetail(c, p) {
+  const w = c.work_id != null ? S.ix.works.get(c.work_id) : null;
+  const facts = [["Source", c.source], ["Source ID", c.source_id], ["GameEye platform ID", p ? p.gameeye_id : null],
+    ["GameEye country ID", c.country], ["Game", w && w.title], ["Created", day(c.created_at)], ["Updated", day(c.updated_at)],
+    ["Removed", day(c.removed_at)]].filter(([, v]) => v != null && v !== "");
+  const reason = c.removed_at == null ? "" : `<label class="reason">Why it left the collection
+      <select class="txt" data-reason="${c.id}">${[["", "Not recorded"], ...REASONS].map(([k, l]) =>
+        `<option value="${k}"${k === (c.removed_reason || "") ? " selected" : ""}>${esc(l)}</option>`).join("")}</select></label>`;
+  return `<tr class="detail-row" data-detail="c${c.id}" id="d-c${c.id}"><td colspan="8"><div class="detail">
+    <dl class="facts wide">${facts.map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`).join("")}</dl>
+    ${reason ? `<div class="wide">${reason}${errHtml(S.actErr.get(`c${c.id}`))}</div>` : ""}
+  </div></td></tr>`;
+}
+
+// ---------------------------------------------------------------- Up next, Duplicates, Import
+function renderUpNext() {
+  const who = personName(S.person);
+  const order = (S.cat.up_next[String(S.person)] || []).filter((w) => S.ix.works.has(w));
+  const msg = S.unMsg ? `<p class="msg${S.unMsg.err ? " err" : ""}" role="alert">${esc(S.unMsg.text)}</p>` : "";
+  let body;
+  if (!order.length) {
+    body = `<div class="empty">Nothing is up next for ${esc(who)}.<br>Set a game's status to Up next in Games and it joins the end of this list.</div>`;
+  } else {
+    body = `<ol class="queue">${order.map((wid, i) => {
+      const w = S.ix.works.get(wid);
+      const copies = (S.ix.byWork.get(wid) || []).filter((c) => c.removed_at == null).sort(byChip);
+      const note = noteOf(wid);
+      const btn = (dir, label, off) => `<button type="button" class="btn sm" data-move="${dir}" data-mwork="${wid}"${off ? " disabled" : ""}
+        aria-label="${esc(`${label}: ${w.title}`)}">${label}</button>`;
+      return `<li data-uwork="${wid}"><span class="pos num" aria-label="Number ${i + 1}">${i + 1}</span>
+        <div><div class="un-title">${esc(w.title)}</div>
+          <div class="chips">${copies.length ? copies.map((c) => chipHtml(c, true)).join("") : `<span class="muted">No copies in the catalog</span>`}</div>
+          ${note ? `<p class="un-note">${esc(note.length > 160 ? note.slice(0, 160) + "…" : note)}</p>` : ""}</div>
+        <div class="moves">${btn("up", "Move up", i === 0)}${btn("down", "Move down", i === order.length - 1)}</div></li>`;
+    }).join("")}</ol>`;
+  }
+  $("view-up-next").innerHTML = `<h2>Up next for ${esc(who)}</h2>
+    <p class="lede">What ${esc(who)} plays next, in order. Pick another player at the top to see their list.</p>${msg}${body}`;
+}
+
+function renderDups() {
+  const groups = S.cat.dup_groups.filter((g) => S.ix.works.has(g.work));
+  const rows = groups.map((g) => {
+    const w = S.ix.works.get(g.work), p = S.ix.plat.get(g.platform);
+    const copies = g.copies.map((id) => S.ix.copy.get(id)).filter(Boolean).map((c) =>
+      `<li><span class="chip" style="--fam:var(--f-${esc((p && p.family) || "other")})">${esc([c.condition, c.edition].filter(Boolean).join(" · "))}</span>
+       <span class="muted num">added ${day(c.created_at) || "?"}</span></li>`).join("");
+    const key = `${g.work}:${g.platform}`;
+    return `<tr class="dup-row" data-dup="${key}">
+      <td class="title" data-k="Game">${esc(w.title)}</td>
+      <td data-k="Platform">${esc(p ? p.name : "?")}</td>
+      <td data-k="Copies"><ul class="dcopies">${copies}</ul></td>
+      <td class="act"><button type="button" class="btn sm" data-ack="${key}" aria-label="${esc(`These are separate copies: ${w.title}, ${p ? p.name : ""}`)}">These are separate copies</button>
+        <a href="/games#q=${esc(encodeURIComponent(w.title))}">Open in Games</a>${S.dupErr && S.dupErr.key === key ? errHtml(S.dupErr.msg) : ""}</td></tr>`;
+  }).join("");
+  $("view-duplicates").innerHTML = `<h2>Duplicates</h2>
+    <p class="lede">Games with more than one copy on the same platform. If you really own both, mark them as separate copies;
+      a group comes back if its copies change. If one is a mistake, fix it in GameEye and import again.</p>
+    ${groups.length ? `<div class="tablewrap"><table><thead><tr><th>Game</th><th>Platform</th><th>Copies</th><th class="r"><span class="sr">Action</span></th></tr></thead>
+      <tbody>${rows}</tbody></table></div>`
+      : `<div class="empty">No duplicates to review.</div>`}`;
+}
+
+const OPS = [["add", "Added"], ["edit", "Edited"], ["remove", "Removed"], ["restore", "Restored"]];
+const WARN_LABEL = { user_version: "Backup version", bad_row: "Row skipped", unknown_category: "Unknown category",
+                     unmapped_platform: "Unmapped platform" };
+const OP_KEY = { add: "added", edit: "edited", remove: "removed", restore: "restored" };
+function statsHtml(sum) {
+  const cell = (n, l, op) => `<span class="stat${n ? "" : " zero"}${op ? ` op-${op}` : ""}">${l} <strong class="num">${(n || 0).toLocaleString()}</strong></span>`;
+  const main = [...OPS.map(([op, l]) => cell(sum[OP_KEY[op]], l, op)), cell(sum.unchanged, "Unchanged"), cell(sum.skipped, "Skipped")];
+  const csv = sum.csv ? `<div class="stats" aria-label="CSV enrichment"><span class="stats-label">From the CSV</span>${
+    [["enriched", "Enriched"], ["unmatched", "Unmatched"], ["ambiguous", "Ambiguous"]].map(([k, l]) => cell(sum.csv[k], l)).join("")}</div>` : "";
+  return `<div class="stats" aria-label="Summary">${main.join("")}</div>${csv}`;
+}
+function changesHtml(changes) {
+  return OPS.map(([op, l]) => {
+    const list = changes.filter((c) => c.op === op);
+    if (!list.length) return "";
+    return `<details class="group op-${op}" data-group="${op}"${list.length <= 50 ? " open" : ""}><summary><h3>${l} (${list.length.toLocaleString()})</h3></summary>
+      <ul>${list.map((c) => `<li data-op="${op}"><span class="t">${esc(c.title)}</span><span class="muted">${esc(c.platform)}</span>
+        <span class="muted">${esc(c.condition)}</span></li>`).join("")}</ul></details>`;
+  }).join("");
+}
+function renderImport() {
+  const I = S.imp, ph = I.phase;
+  $("view-import").dataset.phase = ph;  // tests and styles can tell a settled result from one in flight
+  const ged = $("gedFile").files.length > 0;
+  $("impForm").hidden = !["idle", "staging"].includes(ph);
+  $("stageBtn").disabled = ph !== "idle" || !ged;
+  $("stageBtn").textContent = ph === "staging" ? "Staging…" : "Stage import";
+  const li = S.cat.last_import;
+  $("impLast").textContent = li ? `Last import applied ${day(li.applied_at)}: ${li.summary.added || 0} added, ${li.summary.edited || 0} edited, ` +
+    `${li.summary.removed || 0} removed, ${li.summary.restored || 0} restored.` : "No import has been applied yet.";
+  const again = `<button type="button" class="btn" id="restageBtn">Stage another backup</button>`;
+  let html = "";
+  if (ph === "idle" || ph === "staging") html = I.err ? `<span class="err" role="alert">Couldn't stage the backup: ${esc(I.err)}</span>` : "";
+  else if (ph === "unchanged") {
+    html = `<div class="outcome"><h3>No changes since the last import</h3>
+      <p>This backup is the one applied last; all ${(I.data.summary.unchanged || 0).toLocaleString()} copies are unchanged.</p>${again}</div>`;
+  } else if (ph === "applied") {
+    html = `<div class="outcome applied" role="status"><h3>Applied</h3><p>The catalog now matches this backup.</p>
+      ${statsHtml(I.result.summary)}<div class="actions"><a class="btn" href="/games">Open Games</a>${again}</div></div>`;
+  } else {
+    const d = I.data, sum = d.summary;
+    const active = S.cat.copies.filter((c) => c.source === "gameeye" && c.removed_at == null).length;
+    const guard = d.removal_guard ? `<div class="guard"><p>This backup removes ${sum.removed.toLocaleString()} of the
+        ${active.toLocaleString()} copies in the catalog. That is more than a quarter, which usually means the backup is incomplete.</p>
+        <label class="check"><input type="checkbox" id="confirmRm"${I.confirm ? " checked" : ""}> Yes, remove ${sum.removed.toLocaleString()} copies</label></div>` : "";
+    const warns = d.warnings.length ? `<ul class="warns" aria-label="Warnings">${d.warnings.map((w) =>
+      `<li><strong>${esc(WARN_LABEL[w.kind] || w.kind)}</strong>${esc(w.detail)}</li>`).join("")}</ul>` : "";
+    const n = OPS.reduce((a, [op]) => a + (sum[OP_KEY[op]] || 0), 0);
+    const off = ph === "applying" || I.dead || (d.removal_guard && !I.confirm);
+    const dead = I.dead ? " Stage the backup again to see what it would change now." : "";
+    html = `<h3 class="sr">Staged changes</h3>${statsHtml(sum)}${warns}${guard}
+      <div class="actions"><button type="button" class="btn primary" id="applyBtn"${off ? " disabled" : ""}>${ph === "applying" ? "Applying…"
+        : n ? `Apply ${n.toLocaleString()} change${n === 1 ? "" : "s"}` : sum.csv ? "Apply CSV data" : "Apply"}</button>${again}
+        ${I.err ? `<span class="err" role="alert">Couldn't apply: ${esc(I.err)}.${dead}</span>` : ""}</div>
+      ${changesHtml(d.changes)}`;
+  }
+  if (html !== S.impHtml) { $("impResult").innerHTML = html; S.impHtml = html; }
 }
 
 // ---------------------------------------------------------------- filter panel
@@ -548,14 +898,19 @@ function renderHeader() {
 
 // Re-rendering replaces the panel and the table, so the focused control is found again by its data attributes
 // (and the caret restored in a text field); otherwise keyboard focus would fall back to <body> on every change.
-const FOCUS_KEYS = ["fa", "fv", "fo", "fb", "fs", "ps", "work", "clear"];
+const FOCUS_KEYS = ["fa", "fv", "fo", "fb", "fs", "ps", "work", "clear", "dwork", "person", "note", "savenote", "disc",
+                    "clearyes", "clearno", "split", "splitt", "splitgo", "splitno", "mergeq", "mergepick", "mfrom", "mergego",
+                    "mergeno", "move", "mwork", "ack", "reason"];
 function focusKey() {
   const el = document.activeElement;
-  if (!el || el === document.body || !el.closest("#fbody, #view-games, #view-items")) return null;
+  if (!el || el === document.body || !el.closest("#fbody, .view")) return null;
   const attrs = FOCUS_KEYS.filter((k) => el.dataset[k] !== undefined).map((k) => [k, el.dataset[k]]);
-  if (!attrs.length) return null;
-  const sel = el.tagName.toLowerCase() + (el.classList.contains("status") ? ".status" : "") +
-    attrs.map(([k, v]) => `[data-${k}="${CSS.escape(v)}"]`).join("");
+  let sel;
+  if (attrs.length) {
+    sel = el.tagName.toLowerCase() + (el.classList.contains("status") ? ".status" : "") +
+      attrs.map(([k, v]) => `[data-${k}="${CSS.escape(v)}"]`).join("");
+  } else if (el.id) sel = "#" + CSS.escape(el.id);
+  else return null;
   const caret = typeof el.selectionStart === "number" ? [el.selectionStart, el.selectionEnd] : null;
   return { sel, caret };
 }
@@ -566,18 +921,29 @@ function restoreFocus(k) {
   el.focus({ preventScroll: true });
   if (k.caret) { try { el.setSelectionRange(k.caret[0], k.caret[1]); } catch (e) { /* not a text field */ } }
 }
+// After an action removes or disables the control that had focus, focus goes to the first of these that can take it.
+function focusFirst(sels) {
+  for (const s of sels || []) {
+    const el = document.querySelector(s);
+    if (el && !el.disabled && el.getClientRects().length) { el.focus({ preventScroll: true }); return true; }
+  }
+  return false;
+}
 
 function render() {
   if (!S.cat) return;
-  const fk = focusKey();
-  try { renderViews(); } finally { restoreFocus(fk); }
+  const fk = focusKey(), want = S.refocus;
+  S.refocus = null;
+  try { renderViews(); } finally { if (!focusFirst(want)) restoreFocus(fk); }
 }
 function renderViews() {
   renderHeader();
   for (const v of ["games", "items", "up-next", "duplicates", "import"]) $(`view-${v}`).hidden = v !== S.view;
   $("filterbar").hidden = !FILTERED.has(S.view);
   syncTabs();
-  if (!FILTERED.has(S.view)) return;
+  if (S.view === "up-next") return renderUpNext();
+  if (S.view === "duplicates") return renderDups();
+  if (S.view === "import") return renderImport();
   renderPanel();
   if (S.view === "games") renderGames(); else renderItems();
 }
@@ -592,46 +958,137 @@ async function loadCatalog() {
   S.cat = await r.json();
   S.etag = r.headers.get("ETag");
   S.ix = index(S.cat);
-  stMap = null;
+  psMap = null;
   if (!S.cat.persons.some((p) => p.id === S.person)) S.person = S.cat.persons.length ? S.cat.persons[0].id : null;
 }
-function applyLocal(person, work, status) {
+function applyLocal(person, work, status, note) {
   const ps = S.cat.play_state;
   const i = ps.findIndex((s) => s.person === person && s.work === work);
   if (status === "") { if (i >= 0) ps.splice(i, 1); }
-  else if (i >= 0) ps[i].status = status;
-  else ps.push({ person, work, status, note: null, updated_at: Math.floor(Date.now() / 1000) });
+  else if (i >= 0) { ps[i].status = status; if (note !== undefined) ps[i].note = note; }
+  else ps.push({ person, work, status, note: note ?? null, updated_at: Math.floor(Date.now() / 1000) });
   const key = String(person);
   const order = (S.cat.up_next[key] || []).filter((w) => w !== work);
   if (status === "up_next") order.push(work);
   S.cat.up_next[key] = order;
-  stMap = null;
+  psMap = null;
 }
-// Saves run one at a time. A stale ETag (someone else changed the catalog) refetches and retries once.
-function saveStatus(work, status) {
-  const person = S.person, key = `${person}:${work}`;
-  const mine = { status };
-  S.pending.set(key, mine);
-  S.rowErr = null;
-  S.queue = S.queue.then(async () => {
-    let msg = null;
+// Every save runs one at a time, in order. The chain swallows a failed job so one throw (in a fetch, in render,
+// anywhere) can never stop the saves queued behind it.
+function enqueue(job) {
+  S.queue = S.queue.then(job).catch((e) => { console.error("Player Select: a save failed:", e); });
+}
+async function send(method, url, body, headers = {}) {
+  return fetch(url, { method, headers: { "Content-Type": "application/json", ...headers }, body: JSON.stringify(body) });
+}
+const OFFLINE = "Couldn't reach the server. Nothing was saved.";
+// A status (note undefined) or a note (status taken from the catalog when the job runs). A stale ETag (someone
+// else changed the catalog) refetches and retries once.
+function savePlay(person, work, status, note) {
+  const key = `${person}:${work}`;
+  const mine = { status: status ?? statusOf(work, person) };
+  if (status !== undefined) S.pending.set(key, mine);
+  S.msgs.delete(key);
+  enqueue(async () => {
+    let msg = null, saved = false;
     try {
       for (let attempt = 0; attempt < 2; attempt++) {
-        const headers = { "Content-Type": "application/json" };
-        if (S.etag) headers["If-Match"] = S.etag;
-        const r = await fetch("/api/play-state", { method: "PUT", headers, body: JSON.stringify({ person, work, status }) });
+        const st = status ?? statusOf(work, person);
+        if (note !== undefined && !st) { msg = "Set a status before saving a note."; break; }
+        const body = { person, work, status: st };
+        if (note !== undefined) body.note = note;
+        const r = await send("PUT", "/api/play-state", body, S.etag ? { "If-Match": S.etag } : {});
         if (r.status === 412 && attempt === 0) { await loadCatalog(); continue; }
         if (!r.ok) { msg = await apiError(r); break; }
         S.etag = r.headers.get("ETag") || S.etag;
-        applyLocal(person, work, status);
+        applyLocal(person, work, st, (await r.json()).note);
+        saved = true;
         break;
       }
     } catch (e) {
-      msg = "Couldn't reach the server. The status was not saved.";
+      msg = OFFLINE;
+    } finally {
+      if (S.pending.get(key) === mine) S.pending.delete(key);  // a later edit of the same row keeps its marker
     }
-    if (S.pending.get(key) === mine) S.pending.delete(key);  // a later edit of the same row keeps its marker
-    if (msg) S.rowErr = { work, msg };
+    if (msg) S.msgs.set(key, { err: msg });
+    else if (saved && note !== undefined) { S.drafts.delete(key); S.msgs.set(key, { ok: "Note saved" }); }
+    else if (saved && status === "") S.drafts.delete(key);
     render();
+  });
+}
+// Merge, split, Up next, duplicates, removal reasons and import apply change more than one row: refetch after.
+function mutate(method, url, body, { ok, fail, refocus } = {}) {
+  enqueue(async () => {
+    let r;
+    try { r = await send(method, url, body); } catch (e) { fail && fail(OFFLINE, 0); render(); return; }
+    if (r.ok) { const b = await r.json(); ok && ok(b); }
+    else { const m = await apiError(r); fail && fail(m, r.status); }
+    try { await loadCatalog(); } catch (e) { $("loadErr").textContent = `Couldn't reload the catalog: ${e.message}. Reload the page.`; $("loadErr").hidden = false; }
+    if (refocus) S.refocus = refocus();
+    render();
+  });
+}
+function changeStatus(person, work, value, where) {
+  const key = `${person}:${work}`;
+  S.confirm = null;
+  if (value === "" && noteOf(work, person)) {
+    S.confirm = { key, where };
+    render();  // the select goes back to the current status until the clear is confirmed
+    return;
+  }
+  savePlay(person, work, value);
+}
+function moveUpNext(work, dir) {
+  const person = S.person;
+  const order = [...(S.cat.up_next[String(person)] || [])];
+  const i = order.indexOf(work), j = dir === "up" ? i - 1 : i + 1;
+  if (i < 0 || j < 0 || j >= order.length) return;
+  [order[i], order[j]] = [order[j], order[i]];
+  S.cat.up_next[String(person)] = order;  // shown at once; the refetch after the save has the last word
+  S.unMsg = null;
+  S.refocus = [`button[data-move="${dir}"][data-mwork="${work}"]`, `button[data-mwork="${work}"]:not(:disabled)`];
+  render();
+  mutate("PUT", "/api/up-next", { person, order }, {
+    fail: (m, code) => { S.unMsg = code === 409 ? { text: "The list changed somewhere else. This is the current order; move again if needed." }
+                                                : { text: `Couldn't save the order: ${m}`, err: true }; },
+    refocus: () => [`button[data-move="${dir}"][data-mwork="${work}"]`, `button[data-mwork="${work}"]:not(:disabled)`],
+  });
+}
+
+// ---------------------------------------------------------------- import
+function stageImport() {
+  const ged = $("gedFile").files[0], csv = $("csvFile").files[0];
+  if (!ged || S.imp.phase !== "idle") return;
+  const fd = new FormData();
+  fd.append("ged", ged, ged.name);
+  if (csv) fd.append("csv", csv, csv.name);
+  S.imp = { phase: "staging" };
+  render();
+  enqueue(async () => {
+    try {
+      const r = await fetch("/api/import/gameeye", { method: "POST", body: fd });
+      if (!r.ok) { S.imp = { phase: "idle", err: await apiError(r) }; S.refocus = ["#stageBtn"]; }
+      else {
+        const d = await r.json();
+        S.imp = d.import_id == null ? { phase: "unchanged", data: d } : { phase: "staged", data: d, confirm: false };
+        S.refocus = ["#applyBtn:not(:disabled)", "#confirmRm", "#restageBtn"];
+      }
+    } catch (e) {
+      S.imp = { phase: "idle", err: "couldn't reach the server" };
+    }
+    render();
+  });
+}
+function applyImport() {
+  const I = S.imp;
+  if (I.phase !== "staged" || I.dead || (I.data.removal_guard && !I.confirm)) return;
+  S.imp = { ...I, phase: "applying", err: null };
+  render();
+  mutate("POST", `/api/import/${I.data.import_id}/apply`, { confirm_removals: !!I.confirm }, {
+    ok: (b) => { S.imp = { phase: "applied", result: b }; },
+    // 404, 409 and 410 mean this staged run can never apply; 428 only needs the box ticked.
+    fail: (m, code) => { S.imp = { ...I, phase: "staged", err: m, dead: [404, 409, 410].includes(code) }; },
+    refocus: () => ["#view-import .applied a", "#restageBtn"],
   });
 }
 
@@ -651,9 +1108,11 @@ $("filtersBtn").addEventListener("click", () => {
 $("person").addEventListener("change", (e) => {
   S.person = Number(e.target.value);
   store.set("ps-person", String(S.person));
-  S.rowErr = null;
+  S.confirm = null;
+  S.unMsg = null;
   render();
 });
+$("impForm").addEventListener("submit", (e) => { e.preventDefault(); stageImport(); });
 document.querySelector(".tabs").addEventListener("click", (e) => {
   const a = e.target.closest("a[data-view]");
   if (!a || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
@@ -665,34 +1124,163 @@ document.querySelector(".tabs").addEventListener("click", (e) => {
 // Platform ids are validated against the catalog, so the URL is only read once it has loaded.
 window.addEventListener("popstate", () => { if (!S.cat) return; S.f = loadInitialFilters(); setView(viewFromPath()); });
 window.addEventListener("hashchange", () => { if (!S.cat) return; S.f = loadInitialFilters(); writeHash(); render(); });
+const num = (v) => Number(v);
+const pair = (v) => v.split(":").map(Number);
 document.addEventListener("click", (e) => {
   const t = e.target.closest("button");
   if (!t) return;
-  if (t.dataset.clear !== undefined) { setFilters({}); return; }
-  if (t.dataset.fa !== undefined) {
-    const k = t.dataset.fa, v = t.dataset.fv;
+  const d = t.dataset;
+  if (d.clear !== undefined) { setFilters({}); return; }
+  if (d.fa !== undefined) {
+    const k = d.fa, v = d.fv;
     const cur = S.f[k].map(String);
     const next = cur.includes(v) ? cur.filter((x) => x !== v) : [...cur, v];
     setFilters({ ...S.f, [k]: next });
     return;
   }
-  if (t.dataset.fo !== undefined) {
-    const k = t.dataset.fo, v = t.dataset.fv;
-    setFilters({ ...S.f, [k]: S.f[k] === v ? "" : v });
+  if (d.fo !== undefined) { setFilters({ ...S.f, [d.fo]: S.f[d.fo] === d.fv ? "" : d.fv }); return; }
+  if (d.disc !== undefined) { S.open.has(d.disc) ? S.open.delete(d.disc) : S.open.add(d.disc); render(); return; }
+  if (d.clearyes !== undefined) {
+    const [person, work] = pair(d.clearyes);
+    S.confirm = null;
+    S.refocus = [`select.status[data-dwork="${work}"][data-person="${person}"]`, `select.status[data-work="${work}"]`];
+    savePlay(person, work, "");
+    render();
+    return;
+  }
+  if (d.clearno !== undefined) {
+    const [person, work] = pair(d.clearno);
+    S.confirm = null;
+    S.refocus = [`select.status[data-dwork="${work}"][data-person="${person}"]`, `select.status[data-work="${work}"]`];
+    render();
+    return;
+  }
+  if (d.savenote !== undefined) {
+    const [person, work] = pair(d.savenote);
+    const key = d.savenote;
+    savePlay(person, work, undefined, S.drafts.has(key) ? S.drafts.get(key) : noteOf(work, person));
+    return;
+  }
+  if (d.split !== undefined) {
+    const c = S.ix.copy.get(num(d.split));
+    if (!c) return;
+    S.split.set(c.id, c.raw_title);
+    S.actErr.delete(`s${c.id}`);
+    S.refocus = [`input[data-splitt="${c.id}"]`];
+    render();
+    return;
+  }
+  if (d.splitno !== undefined) {
+    S.split.delete(num(d.splitno));
+    S.refocus = [`button[data-split="${d.splitno}"]`];
+    render();
+    return;
+  }
+  if (d.splitgo !== undefined) {
+    const id = num(d.splitgo), title = (S.split.get(id) || "").trim();
+    if (!title) { S.actErr.set(`s${id}`, "Type a title for the copy."); render(); return; }
+    let made = null;
+    mutate("POST", "/api/work/split", { copy: id, title }, {
+      ok: (b) => { made = b.work; S.split.delete(id); S.actErr.delete(`s${id}`); S.open.add(`w${b.work}`); },
+      fail: (m) => S.actErr.set(`s${id}`, m),
+      refocus: () => [`button[data-disc="w${made}"]`, `button[data-splitgo="${id}"]`],
+    });
+    return;
+  }
+  if (d.mergepick !== undefined) {
+    const from = num(d.mfrom), into = num(d.mergepick);
+    S.mergePick.get(from) === into ? S.mergePick.delete(from) : S.mergePick.set(from, into);
+    S.actErr.delete(`m${from}`);
+    render();
+    return;
+  }
+  if (d.mergeno !== undefined) {
+    S.mergePick.delete(num(d.mergeno));
+    S.refocus = [`input[data-mergeq="${d.mergeno}"]`];
+    render();
+    return;
+  }
+  if (d.mergego !== undefined) {
+    const from = num(d.mergego), into = S.mergePick.get(from);
+    if (into == null) return;
+    mutate("POST", "/api/work/merge", { into, from }, {
+      ok: () => { S.open.delete(`w${from}`); S.open.add(`w${into}`); S.mergePick.delete(from); S.mergeQ.delete(from); },
+      fail: (m) => S.actErr.set(`m${from}`, m),
+      refocus: () => [`button[data-disc="w${into}"]`, `button[data-mergego="${from}"]`],
+    });
+    return;
+  }
+  if (d.move !== undefined) { moveUpNext(num(d.mwork), d.move); return; }
+  if (d.ack !== undefined) {
+    const [work, platform] = pair(d.ack);
+    const keys = S.cat.dup_groups.map((g) => `${g.work}:${g.platform}`), i = keys.indexOf(d.ack);
+    S.dupErr = null;
+    mutate("POST", "/api/dup-ack", { work, platform }, {
+      fail: (m) => { S.dupErr = { key: d.ack, msg: m }; },
+      refocus: () => [keys[i + 1], keys[i - 1], d.ack].filter(Boolean).map((k) => `button[data-ack="${k}"]`),
+    });
+    return;
+  }
+  if (t.id === "applyBtn") { applyImport(); return; }
+  if (t.id === "restageBtn") {
+    S.imp = { phase: "idle" };
+    $("impForm").reset();
+    S.refocus = ["#gedFile"];
+    render();
   }
 });
 document.addEventListener("change", (e) => {
-  const t = e.target;
+  const t = e.target, d = t.dataset || {};
   if (t.matches("select.status[data-work]")) {
     t.dataset.saved = "0";
-    saveStatus(Number(t.dataset.work), t.value);
+    changeStatus(S.person, num(d.work), t.value, "row");
     return;
   }
-  if (t.dataset.fb !== undefined) { setFilters({ ...S.f, [t.dataset.fb]: t.checked }); return; }
-  if (t.dataset.fs !== undefined) setFilters({ ...S.f, [t.dataset.fs]: t.value });
+  if (t.matches("select.status[data-dwork]")) {
+    t.dataset.saved = "0";
+    changeStatus(num(d.person), num(d.dwork), t.value, "detail");
+    return;
+  }
+  if (d.reason !== undefined) {
+    const id = num(d.reason);
+    S.actErr.delete(`c${id}`);
+    mutate("PUT", `/api/copy/${id}`, { removed_reason: t.value || null }, { fail: (m) => S.actErr.set(`c${id}`, m) });
+    return;
+  }
+  if (t.id === "gedFile" || t.id === "csvFile") { S.imp = { phase: "idle" }; render(); return; }
+  if (t.id === "confirmRm") { S.imp.confirm = t.checked; $("applyBtn").disabled = !t.checked || !!S.imp.dead; return; }
+  if (d.fb !== undefined) { setFilters({ ...S.f, [d.fb]: t.checked }); return; }
+  if (d.fs !== undefined) setFilters({ ...S.f, [d.fs]: t.value });
 });
 document.addEventListener("input", (e) => {
-  if (e.target.dataset && e.target.dataset.ps === "pub") { S.pickQ = e.target.value.slice(0, 120); $("opts-pub").innerHTML = pubOptions(); }
+  const t = e.target, d = t.dataset || {};
+  if (d.ps === "pub") { S.pickQ = t.value.slice(0, 120); $("opts-pub").innerHTML = pubOptions(); return; }
+  if (d.note !== undefined) {
+    // Typing updates the counter in place; a full render here would fight the caret.
+    S.drafts.set(d.note, t.value);
+    const n = chars(t.value), cnt = $(`cnt-${d.note}`), btn = t.closest(".pl").querySelector("button[data-savenote]");
+    cnt.textContent = `${n} / ${NOTE_MAX}`;
+    cnt.className = `num ${n > NOTE_MAX ? "err" : "muted"}`;
+    btn.disabled = n > NOTE_MAX;
+    const ok = t.closest(".pl").querySelector(".ok");
+    if (ok) { ok.remove(); S.msgs.delete(d.note); }
+    return;
+  }
+  if (d.splitt !== undefined) { S.split.set(num(d.splitt), t.value); return; }
+  if (d.mergeq !== undefined) {
+    const w = num(d.mergeq);
+    S.mergeQ.set(w, t.value.slice(0, 200));
+    S.mergePick.delete(w);
+    const work = S.ix.works.get(w);
+    if (work) $(`picks-${w}`).innerHTML = mergePicks(work) + mergeConfirm(work);
+  }
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && e.target.dataset && e.target.dataset.splitt !== undefined) {
+    e.preventDefault();
+    const b = document.querySelector(`button[data-splitgo="${e.target.dataset.splitt}"]`);
+    if (b) b.click();
+  }
 });
 
 // ---------------------------------------------------------------- start
