@@ -146,8 +146,11 @@ class ApplyEditTest(ApplyBase):
         old = self.copy(5)["work_id"]
         with self.store.write() as c:
             c.execute("UPDATE copy SET work_pinned=1 WHERE source_id=?", (u(5),))
+        counts = self.q("SELECT (SELECT COUNT(*) FROM work), (SELECT COUNT(*) FROM work_alias)")[0][:]
         res, _ = self.stage(self.rows_with(**{u(5): {"title": "Something Else [Gold]"}}), now=T0 + 100)
         self.apply(res["import_id"], now=T0 + 110)
+        self.assertEqual(self.q("SELECT (SELECT COUNT(*) FROM work), "
+                                "(SELECT COUNT(*) FROM work_alias)")[0][:], counts)
         c = self.copy(5)
         self.assertEqual((c["work_id"], c["raw_title"], c["edition"], c["work_pinned"]),
                          (old, "Something Else [Gold]", "Gold", 1))
@@ -168,6 +171,20 @@ class ApplyEditTest(ApplyBase):
         out = self.apply(res["import_id"], now=T0 + 210)
         self.assertEqual(out["summary"]["removed"], 1)
         self.assertEqual(self.copy(4)["removed_at"], T0 + 210)
+
+    def test_pinned_restore_with_new_title_creates_no_work(self):
+        self.stage_apply()
+        old = self.copy(5)["work_id"]
+        with self.store.write() as c:
+            c.execute("UPDATE copy SET work_pinned=1, removed_at=1 WHERE source_id=?", (u(5),))
+        counts = self.q("SELECT (SELECT COUNT(*) FROM work), (SELECT COUNT(*) FROM work_alias)")[0][:]
+        res, _ = self.stage(self.rows_with(**{u(5): {"title": "Another Name"}}), now=T0 + 100)
+        out = self.apply(res["import_id"], now=T0 + 110)
+        self.assertEqual(out["summary"]["restored"], 1)
+        c = self.copy(5)
+        self.assertEqual((c["work_id"], c["raw_title"], c["removed_at"]), (old, "Another Name", None))
+        self.assertEqual(self.q("SELECT (SELECT COUNT(*) FROM work), "
+                                "(SELECT COUNT(*) FROM work_alias)")[0][:], counts)
 
     def test_restored_copy_work_keeps_play_state(self):
         self.stage_apply()

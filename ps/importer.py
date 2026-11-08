@@ -276,8 +276,8 @@ def _apply_change(conn, c: dict, plat: int | None, now: int) -> None:
         conn.execute("UPDATE copy SET removed_at=? WHERE source='gameeye' AND source_id=?",
                      (now, sid))
         return
-    work = attach_work(conn, m.raw_title) if m.category == "game" else None
     if c["op"] == "add":
+        work = attach_work(conn, m.raw_title) if m.category == "game" else None
         conn.execute(
             "INSERT INTO copy (work_id, platform_id, category, form, account_id, raw_title, edition,"
             " condition_mask, country, source, source_id, source_item_id, source_platform_id,"
@@ -293,7 +293,7 @@ def _apply_change(conn, c: dict, plat: int | None, now: int) -> None:
     elif cur["work_pinned"] and cur["work_id"] is not None:
         wid, pinned = cur["work_id"], 1
     else:
-        wid, pinned = work, 0
+        wid, pinned = attach_work(conn, m.raw_title), 0
     conn.execute(
         "UPDATE copy SET work_id=?, work_pinned=?, platform_id=?, category=?, raw_title=?,"
         " edition=?, condition_mask=?, country=?, source_item_id=?, source_platform_id=?,"
