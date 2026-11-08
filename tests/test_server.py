@@ -8,6 +8,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+from ps.db import connect  # noqa: E402
 from _support import PERSONS, ROOT, Server, raw_request  # noqa: E402
 
 PAGES = ["/", "/games", "/items", "/up-next", "/duplicates", "/import"]
@@ -215,6 +216,24 @@ class TestEdits(unittest.TestCase):
         self.err(self.srv.put("/api/copy/1", {"removed_reason": "sold"}), 409, "not_removed")
         self.err(self.srv.put("/api/copy/9999", {"removed_reason": "sold"}), 404, "not_found")
         self.err(self.srv.put("/api/copy/x", {"removed_reason": "sold"}), 404, "not_found")
+
+    def test_copy_removed_reason_happy_path(self):
+        self.srv.cleanup()
+        self.srv = Server()
+        self.srv.seed_db()
+        db = connect(self.srv.data / "player_select.db", writer=True)
+        db.execute("UPDATE copy SET removed_at=1800000100 WHERE id=1")
+        db.close()
+        self.srv.start()
+
+        def reason():
+            return next(x for x in self.srv.get("/api/catalog").json()["copies"] if x["id"] == 1)["removed_reason"]
+        r = self.srv.put("/api/copy/1", {"removed_reason": "sold"})
+        self.assertEqual((r.status, r.json()), (200, {"ok": True}))
+        self.assertEqual(reason(), "sold")
+        r = self.srv.put("/api/copy/1", {"removed_reason": None})
+        self.assertEqual((r.status, r.json()), (200, {"ok": True}))
+        self.assertIsNone(reason())
 
     def test_merge(self):
         r = self.srv.post("/api/work/merge", {"into": self.w["Bloodborne"], "from": self.w["Dead to Rights"]})
