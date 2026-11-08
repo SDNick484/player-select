@@ -83,7 +83,7 @@ class Actions(BrowserCase):
         self.assert_clean()
 
     def test_clearing_a_status_with_a_note_asks_first(self):
-        self.play(self.a, self.bb, "playing", note="Chalice dungeons next")
+        self.play(self.a, self.bb, "playing", note="Boss rush next")
         page = self.open(self.context(), "/games")
         sent = []
         page.on("request", lambda r: sent.append(r.method) if r.url.endswith("/api/play-state") else None)
@@ -95,7 +95,7 @@ class Actions(BrowserCase):
         self.assertEqual(page.input_value(sel), "playing")
         page.click(f'button[data-clearno="{self.a}:{self.bb}"]')
         self.assertEqual(page.locator("button[data-clearyes]").count(), 0)
-        self.assertEqual(self.state(), {(self.a, self.bb): ("playing", "Chalice dungeons next")})
+        self.assertEqual(self.state(), {(self.a, self.bb): ("playing", "Boss rush next")})
         page.select_option(sel, "")
         with page.expect_response(PLAY_PUT) as resp:
             page.click(f'button[data-clearyes="{self.a}:{self.bb}"]')
