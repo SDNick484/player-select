@@ -42,6 +42,7 @@ The page is a single HTML file with no build step. Data lives in one SQLite file
 ## Install on Alpine (OpenRC)
 
 ```sh
+apk add git
 git clone https://github.com/SDNick484/player-select.git
 cd player-select
 sh install/alpine.sh

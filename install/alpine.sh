@@ -2,6 +2,7 @@
 # install/alpine.sh - install Player Select on Alpine Linux (OpenRC + BusyBox crond).
 #
 # Run as root from a checkout of this repository:
+#   apk add git
 #   git clone https://github.com/SDNick484/player-select.git
 #   cd player-select && sh install/alpine.sh
 #

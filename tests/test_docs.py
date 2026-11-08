@@ -43,6 +43,13 @@ class ReadmeTest(unittest.TestCase):
         self.assertIn("vpn", sec)
 
 
+    def test_install_installs_git_before_cloning(self):
+        steps = section(read("README.md"), "Install on Alpine (OpenRC)")
+        self.assertIn("git clone", steps)
+        self.assertIn("apk add git", steps)
+        self.assertLess(steps.index("apk add git"), steps.index("git clone"))
+
+
 class AdapterContractTest(unittest.TestCase):
     def test_adapter_example_parses(self):
         text = read("adapters/README.md")
