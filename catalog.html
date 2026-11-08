@@ -1,1 +1,694 @@
-<main id="app">Player Select</main>
+<title>Player Select</title>
+<link rel="icon" id="favicon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23ffc629'/%3E%3Ctext x='16' y='22' font-family='Arial,sans-serif' font-weight='900' font-size='15' text-anchor='middle' fill='%23161b33'%3EP1%3C/text%3E%3C/svg%3E">
+<style>
+:root {
+  color-scheme: light dark;
+  --bg: #e9ecf2; --surface: #ffffff; --ink: #161b33; --muted: #5b6278; --line: #cdd2de; --hover: #f3f5fa;
+  --marquee: #ffc629; --marquee-ink: #161b33; --marquee-line: #e0a800;
+  --focus: #2f5fd0; --err: #b3261e; --err-bg: #fdecea; --pressed: #161b33; --pressed-ink: #ffffff;
+  --player: #8b8f99;
+  --f-playstation: #2e6db4; --f-xbox: #2f8f3a; --f-nintendo: #d3352b; --f-sega: #6a4fb3; --f-atari: #b5651d;
+  --f-nec: #c77c02; --f-pc: #59606e; --f-media: #8a6d3b; --f-other: #8b8f99;
+  --st-backlog: #e7eaf3; --st-up_next: #fff1c2; --st-playing: #dcebff; --st-finished: #dff3e2;
+  --st-abandoned: #f1e4e4; --st-not_for_me: #ececec;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #12162a; --surface: #1b2038; --ink: #e8ebf5; --muted: #9aa1b8; --line: #2c3352; --hover: #222846;
+    --focus: #8fb0ff; --err: #ffb4ab; --err-bg: #3b1d1b; --pressed: #e8ebf5; --pressed-ink: #12162a;
+    --st-backlog: #262c48; --st-up_next: #4a3d10; --st-playing: #1d3557; --st-finished: #1e3b28;
+    --st-abandoned: #3d2626; --st-not_for_me: #2a2d38;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #12162a; --surface: #1b2038; --ink: #e8ebf5; --muted: #9aa1b8; --line: #2c3352; --hover: #222846;
+  --focus: #8fb0ff; --err: #ffb4ab; --err-bg: #3b1d1b; --pressed: #e8ebf5; --pressed-ink: #12162a;
+  --st-backlog: #262c48; --st-up_next: #4a3d10; --st-playing: #1d3557; --st-finished: #1e3b28;
+  --st-abandoned: #3d2626; --st-not_for_me: #2a2d38;
+}
+body { background: var(--bg); color: var(--ink); }
+* { box-sizing: border-box; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+button, input, select { font: inherit; color: inherit; }
+.num { font-variant-numeric: tabular-nums; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* ---- the marquee: the one loud thing on the page */
+.marquee { background: var(--marquee); color: var(--marquee-ink); border-bottom: 3px solid var(--marquee-line); }
+.marquee-in { max-width: 1240px; margin: 0 auto; padding: 14px 16px 0; display: grid;
+  grid-template-columns: auto 1fr auto; grid-template-areas: "mark links player" "tabs tabs tabs"; gap: 6px 20px;
+  align-items: center; }
+.mark { grid-area: mark; margin: 0; font: 900 26px/1 "Arial Narrow", "Roboto Condensed", "Helvetica Neue", system-ui, sans-serif;
+  font-stretch: condensed; letter-spacing: .06em; text-transform: uppercase; white-space: nowrap; }
+.mark span { display: inline-block; padding: 3px 7px 2px; margin-left: 4px; background: var(--marquee-ink); color: var(--marquee);
+  border-radius: 3px; }
+#navlinks { grid-area: links; display: flex; gap: 14px; flex-wrap: wrap; font-size: 13px; }
+#navlinks a { color: var(--marquee-ink); text-underline-offset: 3px; }
+.player { grid-area: player; display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.token { display: inline-grid; place-items: center; min-width: 30px; height: 30px; padding: 0 6px; border-radius: 15px;
+  background: var(--player); color: #fff; font: 800 13px/1 system-ui, sans-serif; letter-spacing: .03em;
+  box-shadow: 0 0 0 2px var(--marquee-ink); }
+#person { min-height: 32px; padding: 3px 8px; border: 2px solid var(--marquee-ink); border-radius: 6px;
+  background: #fff; color: #161b33; font-weight: 600; max-width: 180px; }
+.tabs { grid-area: tabs; display: flex; gap: 2px; margin: 6px 0 -3px; overflow-x: auto; scrollbar-width: none; }
+.tabs a { padding: 8px 14px 9px; border-radius: 8px 8px 0 0; color: var(--marquee-ink); text-decoration: none;
+  font-weight: 600; white-space: nowrap; border: 3px solid transparent; border-bottom: 0; }
+.tabs a:hover { background: rgba(22, 27, 51, .08); }
+.tabs a[aria-current="page"] { background: var(--bg); color: var(--ink); border-color: var(--marquee-line); }
+
+/* ---- the page */
+main { max-width: 1240px; margin: 0 auto; padding: 16px; }
+.bar { display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: center; margin-bottom: 12px; }
+#q { flex: 1 1 260px; min-width: 0; min-height: 36px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 6px;
+  background: var(--surface); }
+.btn { min-height: 36px; padding: 6px 12px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface);
+  cursor: pointer; }
+.btn:disabled { opacity: .45; cursor: default; }
+#count { margin-left: auto; color: var(--muted); white-space: nowrap; }
+#filtersBtn { display: inline-flex; gap: 6px; align-items: center; }
+#filtersBtn::after { content: "▾"; font-size: 11px; color: var(--muted); }
+#filtersBtn[aria-expanded="true"]::after { content: "▴"; }
+.badge { display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 10px;
+  background: var(--pressed); color: var(--pressed-ink); font-size: 12px; font-weight: 700; }
+.fbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; width: 100%; }
+#fbody { width: 100%; padding: 14px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px;
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px 22px; }
+.fgroup { min-width: 0; }
+.fhead { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; margin-bottom: 6px; font-weight: 650; }
+.fhead label { font-weight: 400; font-size: 12.5px; color: var(--muted); white-space: nowrap; }
+.seg { display: flex; flex-wrap: wrap; gap: 5px; }
+.seg button { min-height: 30px; padding: 3px 9px; border: 1px solid var(--line); border-radius: 15px; background: transparent;
+  cursor: pointer; font-size: 13px; }
+.seg button small { color: var(--muted); margin-left: 3px; }
+.seg button[aria-pressed="true"] { background: var(--pressed); color: var(--pressed-ink); border-color: var(--pressed); }
+.seg button[aria-pressed="true"] small { color: inherit; opacity: .75; }
+.seg button[data-fam]::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 2px;
+  margin-right: 6px; background: var(--fam, var(--f-other)); }
+.frow { display: flex; gap: 12px; flex-wrap: wrap; }
+.frow label { display: grid; gap: 3px; font-size: 12.5px; color: var(--muted); }
+.frow select, .fgroup input[type="search"] { min-height: 32px; padding: 3px 8px; border: 1px solid var(--line);
+  border-radius: 6px; background: var(--surface); color: var(--ink); }
+.fgroup input[type="search"] { width: 100%; margin: 6px 0; }
+.fhint { margin: 6px 0 0; font-size: 12.5px; color: var(--muted); }
+.check { display: inline-flex; gap: 6px; align-items: center; cursor: pointer; }
+
+/* ---- the tables */
+.view h2 { margin: 4px 0 12px; font-size: 18px; }
+.tablewrap { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; }
+table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+thead th { position: sticky; top: 0; z-index: 1; background: var(--surface); text-align: left; font-weight: 600;
+  color: var(--muted); font-size: 12.5px; padding: 9px 10px; border-bottom: 1px solid var(--line); }
+tbody td { padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+tbody tr:last-child td { border-bottom: 0; }
+tbody tr:hover { background: var(--hover); }
+td.title { font-weight: 600; min-width: 180px; }
+td.r, th.r { text-align: right; }
+.muted { color: var(--muted); }
+.chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.chip { display: inline-block; padding: 1px 8px 1px 6px; border: 1px solid var(--line); border-left: 4px solid var(--fam, var(--f-other));
+  border-radius: 4px; font-size: 12.5px; white-space: nowrap; }
+.chip.dim { opacity: .45; }
+.chip.gone, tr.removed td.title { text-decoration: line-through; text-decoration-color: var(--muted); }
+tr.removed td { color: var(--muted); }
+.tag { display: inline-block; margin-left: 6px; padding: 0 6px; border-radius: 4px; background: var(--err-bg); color: var(--err);
+  font-size: 11.5px; font-weight: 600; text-decoration: none; }
+select.status { min-height: 30px; max-width: 150px; padding: 2px 6px; border: 1px solid var(--line); border-radius: 6px;
+  background: var(--st, var(--surface)); color: var(--ink); }
+select.status[data-saved="0"] { opacity: .6; }
+.err { display: block; margin-top: 4px; color: var(--err); font-size: 12.5px; font-weight: 500; }
+.empty { padding: 28px 16px; text-align: center; color: var(--muted); }
+.empty .btn { margin-top: 8px; }
+.banner { padding: 12px 14px; border-radius: 8px; background: var(--err-bg); color: var(--err); margin-bottom: 12px; }
+.placeholder { padding: 24px 16px; background: var(--surface); border: 1px dashed var(--line); border-radius: 8px; color: var(--muted); }
+
+/* ---- phone: rows become stacked cards */
+@media (max-width: 760px) {
+  .marquee-in { grid-template-columns: 1fr auto; grid-template-areas: "mark player" "links links" "tabs tabs"; }
+  .mark { font-size: 21px; }
+  #person { max-width: 130px; }
+  .tabs { gap: 0; margin-left: -8px; margin-right: -8px; }
+  .tabs a { padding: 8px 9px 9px; font-size: 13.5px; }
+  #count { margin-left: 0; }
+  thead { display: none; }
+  table, tbody, tr, td { display: block; }
+  tbody tr { padding: 10px 12px; border-bottom: 1px solid var(--line); }
+  tbody td { padding: 0; border: 0; }
+  tbody td + td { margin-top: 5px; }
+  td.title { min-width: 0; font-size: 14.5px; }
+  td.r { text-align: left; }
+  td[data-k]:empty { display: none; }
+  td[data-k]:not(.title):not(.chipcell):not(.st)::before { content: attr(data-k) ": "; color: var(--muted); }
+  tr.copy-row { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 12px; }
+  tr.copy-row td { margin: 0; }
+  tr.copy-row td.title, tr.copy-row td.chipcell { grid-column: 1 / -1; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  select.status, .seg button { transition: background-color .12s ease; }
+}
+</style>
+
+<header class="marquee">
+  <div class="marquee-in">
+    <h1 class="mark">Player <span>Select</span></h1>
+    <nav id="navlinks" aria-label="Other apps" hidden></nav>
+    <div class="player">
+      <span class="token" id="token" aria-hidden="true">P1</span>
+      <label for="person" class="sr">Player: whose status to show and edit</label>
+      <select id="person"></select>
+    </div>
+    <nav class="tabs" aria-label="Views">
+      <a href="/games" data-view="games">Games</a>
+      <a href="/items" data-view="items">Items</a>
+      <a href="/up-next" data-view="up-next">Up next</a>
+      <a href="/duplicates" data-view="duplicates">Duplicates</a>
+      <a href="/import" data-view="import">Import</a>
+    </nav>
+  </div>
+</header>
+
+<main id="app">
+  <div id="loadErr" class="banner" role="alert" hidden></div>
+  <div class="bar" id="filterbar" hidden>
+    <input type="search" id="q" placeholder="Search titles, platforms, editions" autocomplete="off" aria-label="Search">
+    <button type="button" class="btn" id="filtersBtn" aria-expanded="false" aria-controls="fbody">Filters <span class="badge" id="fcount" hidden></span></button>
+    <button type="button" class="btn" id="clearBtn" disabled>Clear filters</button>
+    <span id="count" class="num" aria-live="polite"></span>
+    <div id="fbody" role="region" aria-label="Filters" hidden></div>
+  </div>
+  <section id="view-games" class="view" aria-label="Games" hidden></section>
+  <section id="view-items" class="view" aria-label="Items" hidden></section>
+  <section id="view-up-next" class="view" aria-label="Up next" hidden>
+    <h2>Up next</h2><div class="placeholder">The ordered Up next list arrives in the next update.</div>
+  </section>
+  <section id="view-duplicates" class="view" aria-label="Duplicates" hidden>
+    <h2>Duplicates</h2><div class="placeholder">Duplicate review arrives in the next update.</div>
+  </section>
+  <section id="view-import" class="view" aria-label="Import" hidden>
+    <h2>Import</h2><div class="placeholder">Uploading a GameEye backup arrives in the next update.</div>
+  </section>
+</main>
+
+<script>
+"use strict";
+(() => {
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const store = {
+  get(k) { try { return window.localStorage.getItem(k); } catch (e) { return null; } },
+  set(k, v) { try { window.localStorage.setItem(k, v); } catch (e) { /* storage unavailable: not remembered */ } },
+};
+
+// ---------------------------------------------------------------- vocabulary
+const VIEWS = { "/": "games", "/games": "games", "/items": "items", "/up-next": "up-next", "/duplicates": "duplicates", "/import": "import" };
+const FILTERED = new Set(["games", "items"]);
+const CATS = [["game", "Game"], ["system", "System"], ["controller", "Controller"], ["accessory", "Accessory"],
+              ["print", "Print media"], ["toy", "Toys-to-life"]];
+const CAT_LABEL = Object.fromEntries(CATS);
+const FORMS = [["physical", "Physical"], ["digital", "Digital"], ["subscription_claim", "Subscription claim"]];
+const STATUSES = [["backlog", "Backlog"], ["up_next", "Up next"], ["playing", "Playing"], ["finished", "Finished"],
+                  ["abandoned", "Abandoned"], ["not_for_me", "Not for me"]];
+const ST_KEYS = STATUSES.map(([k]) => k);
+const COND_ORDER = ["New", "CIB", "Boxed", "Loose"];
+const FAMILIES = [["playstation", "PlayStation"], ["xbox", "Xbox"], ["nintendo", "Nintendo"], ["sega", "Sega"],
+                  ["atari", "Atari"], ["nec", "NEC"], ["pc", "PC"], ["media", "Books & media"], ["other", "Other"]];
+const FAM_LABEL = Object.fromEntries(FAMILIES);
+const MC_OPTS = [50, 60, 70, 75, 80, 85, 90, 95];
+// Full GameEye platform names to the short labels used on chips; anything else shows its full name.
+const SHORT = {
+  "Sony PlayStation": "PS1", "Sony PlayStation 2": "PS2", "Sony PlayStation 3": "PS3", "Sony PlayStation 4": "PS4",
+  "Sony PlayStation 5": "PS5", "Sony PSP": "PSP", "Sony PS Vita": "Vita",
+  "Microsoft Xbox": "Xbox", "Microsoft Xbox 360": "Xbox 360", "Microsoft Xbox One": "Xbox One",
+  "Microsoft Xbox Series X": "Series X",
+  "Nintendo Switch": "Switch", "Nintendo Switch 2": "Switch 2", "Nintendo GameCube": "GameCube", "Nintendo 64": "N64",
+  "Nintendo Wii": "Wii", "Nintendo Wii U": "Wii U", "Nintendo 3DS": "3DS", "Nintendo DS": "DS",
+  "Nintendo Game Boy": "Game Boy", "Nintendo Game Boy Advance": "GBA", "Nintendo Game Boy Color": "GBC",
+  "SNES/Super Famicom": "SNES", "NES/Famicom": "NES", "Nintendo Virtual Boy": "Virtual Boy",
+  "Nintendo Game & Watch": "Game & Watch",
+  "Sega Dreamcast": "Dreamcast", "Sega Saturn": "Saturn", "Sega Genesis/Mega Drive": "Genesis",
+  "Sega Game Gear": "Game Gear", "Sega 32X": "32X", "Atari Jaguar": "Jaguar", "TurboGrafx 16": "TG-16",
+};
+const shortName = (p) => (p ? SHORT[p.name] || p.name : "?");
+const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
+const day = (t) => (t ? new Date(t * 1000).toISOString().slice(0, 10) : "");
+
+// ---------------------------------------------------------------- state
+const S = { cat: null, etag: null, person: null, view: "games", f: null,
+            ix: null, pending: new Map(), rowErr: null, queue: Promise.resolve(), pickQ: "" };
+
+// Lookups rebuilt whenever the catalog arrives.
+function index(cat) {
+  const plat = new Map(cat.platforms.map((p) => [p.id, p]));
+  const works = new Map(cat.works.map((w) => [w.id, w]));
+  const byWork = new Map();
+  for (const c of cat.copies) {
+    if (c.work_id == null) continue;
+    if (!byWork.has(c.work_id)) byWork.set(c.work_id, []);
+    byWork.get(c.work_id).push(c);
+  }
+  const used = (fn) => { const m = new Map(); cat.copies.forEach((c) => { const k = fn(c); if (k != null) m.set(k, (m.get(k) || 0) + 1); }); return m; };
+  const genres = new Map(), pubs = new Map();
+  for (const c of cat.copies) {
+    const m = cat.meta[String(c.id)] || {};
+    (m.genre || []).forEach((g) => genres.set(g, (genres.get(g) || 0) + 1));
+    if (m.publisher) pubs.set(m.publisher, (pubs.get(m.publisher) || 0) + 1);
+  }
+  return { plat, works, byWork, genres, pubs,
+           platUsed: used((c) => c.platform_id), famUsed: used((c) => (plat.get(c.platform_id) || {}).family || "other"),
+           catUsed: used((c) => c.category), condUsed: used((c) => c.condition), formUsed: used((c) => c.form) };
+}
+const metaOf = (c) => S.cat.meta[String(c.id)] || {};
+// (person, work) -> status, rebuilt when the catalog or a status changes.
+let stMap = null;
+function statusOf(work) {
+  if (!stMap) stMap = new Map(S.cat.play_state.map((s) => [`${s.person}:${s.work}`, s.status]));
+  return stMap.get(`${S.person}:${work}`) || "";
+}
+
+// ---------------------------------------------------------------- filters (SBT's plumbing)
+const DEFAULT_F = {
+  p: [], fam: [], cat: [], cond: [], ed: "", form: [], st: [], g: [], gUnk: false,
+  mcmin: null, mcmax: null, mcUnk: false, pub: [], pubUnk: false, rm: false, q: "",
+};
+const pickIn = (v, allowed) => (Array.isArray(v) ? [...new Set(v.map(String))].filter((x) => allowed.includes(x)) : []);
+const names = (v, len, max) => (Array.isArray(v) ? [...new Set(v.map(String))].filter((x) => x && x.length <= len).slice(0, max) : []);
+const mcIn = (v) => {
+  if (v === null || v === undefined || v === "") return null;
+  const x = Number(v);
+  return Number.isInteger(x) && x >= 0 && x <= 100 ? x : null;
+};
+// Validate any raw object (from the URL or a control) into a complete filter state.
+function clean(raw) {
+  const o = raw || {};
+  const r = JSON.parse(JSON.stringify(DEFAULT_F));
+  const ix = S.ix;
+  r.p = pickIn(o.p, ix ? [...ix.plat.keys()].map(String) : []).map(Number);
+  r.fam = pickIn(o.fam, FAMILIES.map(([k]) => k));
+  r.cat = pickIn(o.cat, CATS.map(([k]) => k));
+  r.cond = names(o.cond, 40, 20).filter((x) => COND_ORDER.includes(x) || x === "Unknown" || /^Unknown \(\d+\)$/.test(x));
+  r.ed = ["yes", "no"].includes(o.ed) ? o.ed : "";
+  r.form = pickIn(o.form, FORMS.map(([k]) => k));
+  r.st = pickIn(o.st, [...ST_KEYS, "none"]);
+  r.g = names(o.g, 60, 20);
+  r.gUnk = o.gUnk === true;
+  r.mcmin = mcIn(o.mcmin);
+  r.mcmax = mcIn(o.mcmax);
+  r.mcUnk = o.mcUnk === true;
+  r.pub = names(o.pub, 120, 50);
+  r.pubUnk = o.pubUnk === true;
+  r.rm = o.rm === true;
+  if (typeof o.q === "string") r.q = o.q.slice(0, 200);
+  return r;
+}
+function paramsToRaw(p) {
+  const o = {};
+  for (const k of Object.keys(DEFAULT_F)) {
+    const d = DEFAULT_F[k];
+    if (Array.isArray(d)) o[k] = p.getAll(k);
+    else if (typeof d === "boolean") o[k] = p.get(k) === "1";
+    else o[k] = p.get(k);
+  }
+  return o;
+}
+function filtersToParams(f) {
+  const p = new URLSearchParams();
+  for (const k of Object.keys(DEFAULT_F)) {
+    const v = f[k], d = DEFAULT_F[k];
+    if (Array.isArray(v)) v.forEach((x) => p.append(k, String(x)));
+    else if (typeof d === "boolean") { if (v) p.set(k, "1"); }
+    else if (v !== null && v !== undefined && v !== "" && v !== d) p.set(k, String(v));
+  }
+  return p;
+}
+function loadInitialFilters() {
+  try { return clean(paramsToRaw(new URLSearchParams(location.hash.slice(1)))); } catch (e) { return clean({}); }
+}
+function hashString() { const s = filtersToParams(S.f).toString(); return s ? "#" + s : ""; }
+// View tabs carry the current filters, so opening one in a new tab keeps them too.
+function syncTabs() {
+  const h = hashString();
+  document.querySelectorAll(".tabs a[data-view]").forEach((a) => {
+    a.setAttribute("href", a.getAttribute("href").split("#")[0] + h);
+    if (a.dataset.view === S.view) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
+  });
+}
+function writeHash() {
+  try { history.replaceState(history.state, "", location.pathname + location.search + hashString()); } catch (e) { /* ignore */ }
+  syncTabs();
+}
+function activeCount(f) {
+  return Object.keys(DEFAULT_F).filter((k) => k !== "q" && JSON.stringify(f[k]) !== JSON.stringify(DEFAULT_F[k])).length + (f.q ? 1 : 0);
+}
+
+// One copy against every filter (AND). "Include unknown" lets copies with no data for a dimension through.
+function copyMatches(c, f, terms) {
+  if (c.removed_at != null && !f.rm) return false;
+  const p = S.ix.plat.get(c.platform_id);
+  if (f.p.length && !f.p.includes(c.platform_id)) return false;
+  if (f.fam.length && !f.fam.includes((p && p.family) || "other")) return false;
+  if (f.cat.length && !f.cat.includes(c.category)) return false;
+  if (f.cond.length && !f.cond.includes(c.condition)) return false;
+  if (f.ed === "yes" && !c.edition) return false;
+  if (f.ed === "no" && c.edition) return false;
+  if (f.form.length && !f.form.includes(c.form)) return false;
+  if (f.st.length) {
+    if (c.work_id == null) return false;
+    if (!f.st.includes(statusOf(c.work_id) || "none")) return false;
+  }
+  const m = metaOf(c);
+  if (f.g.length) {
+    const gs = m.genre || [];
+    if (gs.length ? !gs.some((g) => f.g.includes(g)) : !f.gUnk) return false;
+  }
+  if (f.mcmin != null || f.mcmax != null) {
+    const mc = m.metacritic;
+    if (mc == null) { if (!f.mcUnk) return false; }
+    else if ((f.mcmin != null && mc < f.mcmin) || (f.mcmax != null && mc > f.mcmax)) return false;
+  }
+  if (f.pub.length) {
+    if (m.publisher ? !f.pub.includes(m.publisher) : !f.pubUnk) return false;
+  }
+  if (terms.length) {
+    const w = c.work_id != null ? S.ix.works.get(c.work_id) : null;
+    const hay = [c.raw_title, w && w.title, p && p.name, shortName(p), c.edition].join(" ").toLowerCase();
+    if (!terms.every((t) => hay.includes(t))) return false;
+  }
+  return true;
+}
+const termsOf = (q) => q.toLowerCase().split(/\s+/).filter(Boolean);
+const byTitle = (a, b) => a.localeCompare(b, "en", { sensitivity: "base", numeric: true });
+
+// ---------------------------------------------------------------- rendering
+function chipHtml(c, matched) {
+  const p = S.ix.plat.get(c.platform_id);
+  const fam = (p && p.family) || "other";
+  const label = [shortName(p), c.condition, c.edition].filter(Boolean).join(" · ");
+  const title = [p ? p.name : "", c.condition, c.edition, c.removed_at != null ? "removed" : ""].filter(Boolean).join(", ");
+  return `<span class="chip${matched ? "" : " dim"}${c.removed_at != null ? " gone" : ""}" style="--fam:var(--f-${esc(fam)})" title="${esc(title)}">${esc(label)}</span>`;
+}
+function statusSelect(work, title) {
+  const pk = `${S.person}:${work}`;
+  const pend = S.pending.has(pk);
+  const cur = pend ? S.pending.get(pk).status : statusOf(work);  // a save in flight shows its value until it lands
+  const who = (S.cat.persons.find((p) => p.id === S.person) || {}).name || "";
+  const opts = [["", "—"], ...STATUSES].map(([k, l]) => `<option value="${k}"${k === cur ? " selected" : ""}>${esc(l)}</option>`).join("");
+  return `<select class="status" data-work="${work}" data-saved="${pend ? 0 : 1}" style="${cur ? `--st:var(--st-${cur})` : ""}" aria-label="${esc(`Status for ${who}: ${title}`)}">${opts}</select>`;
+}
+function emptyHtml(noun) {
+  return `<div class="empty">No ${noun} match these filters.<br><button type="button" class="btn" data-clear>Clear filters</button></div>`;
+}
+function setCount(n, total, noun) {
+  const word = (k) => `${noun}${k === 1 ? "" : "s"}`;
+  $("count").textContent = n === total ? `${n.toLocaleString()} ${word(n)}` : `${n.toLocaleString()} of ${total.toLocaleString()} ${word(total)}`;
+}
+
+function renderGames() {
+  const f = S.f, terms = termsOf(f.q);
+  const rows = [];
+  let total = 0;
+  for (const [wid, copies] of S.ix.byWork) {
+    const shown = copies.filter((c) => c.removed_at == null || f.rm);
+    if (!shown.length) continue;
+    total++;
+    const hits = new Set(shown.filter((c) => copyMatches(c, f, terms)).map((c) => c.id));
+    if (!hits.size) continue;
+    rows.push({ w: S.ix.works.get(wid) || { id: wid, title: copies[0].raw_title }, shown, hits });
+  }
+  rows.sort((a, b) => byTitle(a.w.title, b.w.title) || a.w.id - b.w.id);
+  setCount(rows.length, total, "game");
+  if (!rows.length) { $("view-games").innerHTML = emptyHtml("games"); return; }
+  const body = rows.map(({ w, shown, hits }) => {
+    const genres = [...new Set(shown.flatMap((c) => metaOf(c).genre || []))];
+    const mcs = shown.map((c) => metaOf(c).metacritic).filter((x) => x != null);
+    const order = (c) => [shortName(S.ix.plat.get(c.platform_id)), COND_ORDER.indexOf(c.condition), c.id];
+    const chips = [...shown].sort((a, b) => { const x = order(a), y = order(b); return byTitle(x[0], y[0]) || x[1] - y[1] || x[2] - y[2]; })
+      .map((c) => chipHtml(c, hits.has(c.id))).join("");
+    const gone = shown.every((c) => c.removed_at != null);
+    const err = S.rowErr && S.rowErr.work === w.id ? `<span class="err" role="alert">${esc(S.rowErr.msg)}</span>` : "";
+    return `<tr class="work-row${gone ? " removed" : ""}" data-work="${w.id}">
+      <td class="title" data-k="Title">${esc(w.title)}</td>
+      <td class="chipcell" data-k="Copies"><div class="chips">${chips}</div></td>
+      <td class="st" data-k="Status">${statusSelect(w.id, w.title)}${err}</td>
+      <td data-k="Genre">${esc(genres.join(", "))}</td>
+      <td class="r num" data-k="Metacritic">${mcs.length ? Math.max(...mcs) : ""}</td></tr>`;
+  }).join("");
+  $("view-games").innerHTML = `<div class="tablewrap"><table>
+    <thead><tr><th>Title</th><th>Copies</th><th>Status</th><th>Genre</th><th class="r">Metacritic</th></tr></thead>
+    <tbody>${body}</tbody></table></div>`;
+}
+
+function renderItems() {
+  const f = S.f, terms = termsOf(f.q);
+  const pool = S.cat.copies.filter((c) => c.removed_at == null || f.rm);
+  const hit = pool.filter((c) => copyMatches(c, f, terms));
+  const plat = (c) => shortName(S.ix.plat.get(c.platform_id));
+  hit.sort((a, b) => byTitle(a.raw_title, b.raw_title) || byTitle(plat(a), plat(b)) || a.id - b.id);
+  setCount(hit.length, pool.length, "item");
+  if (!hit.length) { $("view-items").innerHTML = emptyHtml("items"); return; }
+  const body = hit.map((c) => {
+    const p = S.ix.plat.get(c.platform_id);
+    const m = metaOf(c);
+    const rm = c.removed_at != null;
+    const tag = rm ? `<span class="tag">Removed${c.removed_reason ? ": " + esc(c.removed_reason) : ""}</span>` : "";
+    return `<tr class="copy-row${rm ? " removed" : ""}" data-copy="${c.id}">
+      <td class="title" data-k="Title">${esc(c.raw_title)}${tag}</td>
+      <td class="chipcell" data-k="Platform"><span class="chip" style="--fam:var(--f-${esc((p && p.family) || "other")})" title="${esc(p ? p.name : "")}">${esc(p ? p.name : "?")}</span></td>
+      <td data-k="Category">${esc(CAT_LABEL[c.category] || c.category)}</td>
+      <td data-k="Condition">${esc(c.condition)}</td>
+      <td data-k="Edition">${esc(c.edition || "")}</td>
+      <td class="muted" data-k="Country" title="GameEye country ID">${esc(c.country ?? "")}</td>
+      <td class="r num" data-k="CIB value">${m.price_cib != null ? usd.format(m.price_cib) : ""}</td>
+      <td class="num" data-k="Added">${day(c.created_at)}</td></tr>`;
+  }).join("");
+  $("view-items").innerHTML = `<div class="tablewrap"><table>
+    <thead><tr><th>Title</th><th>Platform</th><th>Category</th><th>Condition</th><th>Edition</th><th>Country</th>
+    <th class="r">CIB value</th><th>Added</th></tr></thead><tbody>${body}</tbody></table></div>`;
+}
+
+// ---------------------------------------------------------------- filter panel
+function segHtml(key, opts, extra = () => "") {
+  return `<div class="seg" role="group" aria-label="${esc(key)}">${opts.map(([v, label, n]) => {
+    const on = S.f[key].map(String).includes(String(v));
+    return `<button type="button" data-fa="${esc(key)}" data-fv="${esc(v)}" aria-pressed="${on}"${extra(v)}>${esc(label)}${n != null ? ` <small class="num">${n}</small>` : ""}</button>`;
+  }).join("")}</div>`;
+}
+function oneOfHtml(key, opts) {
+  return `<div class="seg" role="group" aria-label="${esc(key)}">${opts.map(([v, label]) =>
+    `<button type="button" data-fo="${esc(key)}" data-fv="${esc(v)}" aria-pressed="${S.f[key] === v}">${esc(label)}</button>`).join("")}</div>`;
+}
+const unkHtml = (key) => `<label class="check"><input type="checkbox" data-fb="${key}"${S.f[key] ? " checked" : ""}> Include unknown</label>`;
+const fgroup = (title, body, unk) => `<div class="fgroup"><div class="fhead"><span>${esc(title)}</span>${unk ? unkHtml(unk) : ""}</div>${body}</div>`;
+function mcSelect(key, label) {
+  const v = S.f[key];
+  const opts = [...new Set([...MC_OPTS, ...(v != null ? [v] : [])])].sort((a, b) => a - b);
+  return `<label>${label}<select data-fs="${key}"><option value="">Any</option>${opts.map((o) => `<option value="${o}"${o === v ? " selected" : ""}>${o}</option>`).join("")}</select></label>`;
+}
+function pubOptions() {
+  const q = S.pickQ.trim().toLowerCase();
+  const chosen = new Set(S.f.pub);
+  const list = [...S.ix.pubs.entries()].filter(([k]) => !chosen.has(k) && (!q || k.toLowerCase().includes(q)))
+    .sort((a, b) => b[1] - a[1] || byTitle(a[0], b[0]));
+  if (!S.ix.pubs.size) return `<p class="fhint">No publisher data yet. Import the GameEye CSV with the backup.</p>`;
+  if (!list.length) return `<p class="fhint">No match.</p>`;
+  const shown = list.slice(0, 24);
+  return segHtml("pub", shown.map(([k, n]) => [k, k, n])) +
+    (list.length > shown.length ? `<p class="fhint">${(list.length - shown.length).toLocaleString()} more. Type to narrow the list.</p>` : "");
+}
+function sortedUsed(map, order) {
+  return [...map.entries()].sort((a, b) => order(a[0]) - order(b[0]) || byTitle(String(a[0]), String(b[0])));
+}
+function renderPanel() {
+  const ix = S.ix, f = S.f;
+  const famRank = (k) => { const i = FAMILIES.findIndex(([x]) => x === k); return i < 0 ? 99 : i; };
+  const plats = [...ix.platUsed.entries()].map(([id, n]) => [id, ix.plat.get(id), n]).filter((x) => x[1])
+    .sort((a, b) => famRank(a[1].family) - famRank(b[1].family) || byTitle(shortName(a[1]), shortName(b[1])));
+  const famVar = (fam) => ` data-fam style="--fam:var(--f-${esc(fam)})"`;
+  const who = (S.cat.persons.find((p) => p.id === S.person) || {}).name || "";
+  const genres = [...ix.genres.entries()].sort((a, b) => b[1] - a[1] || byTitle(a[0], b[0])).slice(0, 30);
+  // Values in the URL that this catalog has no copies for still show, so they can be turned off.
+  const extras = (key, have) => f[key].filter((v) => !have.has(v)).map((v) => [v, v, 0]);
+  const parts = [
+    fgroup("Platform", segHtml("p", plats.map(([id, p, n]) => [id, shortName(p), n]),
+      (v) => famVar((ix.plat.get(Number(v)) || {}).family || "other"))),
+    fgroup("Platform family", segHtml("fam", sortedUsed(ix.famUsed, famRank).map(([k, n]) => [k, FAM_LABEL[k] || k, n]), famVar)),
+    fgroup("Category", segHtml("cat", [...sortedUsed(ix.catUsed, (k) => CATS.findIndex(([x]) => x === k))
+      .map(([k, n]) => [k, CAT_LABEL[k] || k, n]), ...extras("cat", ix.catUsed)])),
+    fgroup("Condition", segHtml("cond", [...sortedUsed(ix.condUsed, (k) => { const i = COND_ORDER.indexOf(k); return i < 0 ? 99 : i; })
+      .map(([k, n]) => [k, k, n]), ...extras("cond", ix.condUsed)])),
+    fgroup("Edition", oneOfHtml("ed", [["yes", "Has an edition"], ["no", "No edition"]])),
+    fgroup("Form", segHtml("form", [...FORMS.filter(([k]) => ix.formUsed.has(k)).map(([k, l]) => [k, l, ix.formUsed.get(k)]),
+      ...extras("form", ix.formUsed)])),
+    fgroup(`Status for ${who}`, segHtml("st", [["none", "Untriaged"], ...STATUSES])),
+    fgroup("Genre", genres.length || f.g.length
+      ? segHtml("g", [...genres.map(([k, n]) => [k, k, n]), ...extras("g", ix.genres)])
+      : `<p class="fhint">No genre data yet. Import the GameEye CSV with the backup.</p>`, "gUnk"),
+    fgroup("Metacritic", `<div class="frow">${mcSelect("mcmin", "At least")}${mcSelect("mcmax", "At most")}</div>`, "mcUnk"),
+    fgroup("Publisher", (f.pub.length ? segHtml("pub", f.pub.map((k) => [k, k + " ✕"])) : "") +
+      `<input type="search" data-ps="pub" placeholder="Search publishers" value="${esc(S.pickQ)}" autocomplete="off" aria-label="Search publishers">
+       <div id="opts-pub">${pubOptions()}</div>`, "pubUnk"),
+    fgroup("Removed copies", `<label class="check"><input type="checkbox" data-fb="rm"${f.rm ? " checked" : ""}> Show copies no longer in the backup</label>`),
+  ];
+  $("fbody").innerHTML = parts.join("");
+  const n = activeCount(f);
+  $("fcount").textContent = String(n);
+  $("fcount").hidden = n === 0;
+  $("clearBtn").disabled = n === 0;
+  if ($("q").value !== f.q) $("q").value = f.q;
+}
+
+function renderHeader() {
+  const sel = $("person");
+  const opts = S.cat.persons.map((p) => `<option value="${p.id}">${esc(p.name)}</option>`).join("");
+  if (sel.innerHTML !== opts) sel.innerHTML = opts;
+  sel.value = String(S.person);
+  const i = S.cat.persons.findIndex((p) => p.id === S.person);
+  const p = S.cat.persons[i];
+  document.documentElement.style.setProperty("--player", (p && p.color) || "#8b8f99");
+  $("token").textContent = `P${i + 1}`;
+}
+
+function render() {
+  if (!S.cat) return;
+  renderHeader();
+  for (const v of ["games", "items", "up-next", "duplicates", "import"]) $(`view-${v}`).hidden = v !== S.view;
+  $("filterbar").hidden = !FILTERED.has(S.view);
+  syncTabs();
+  if (!FILTERED.has(S.view)) return;
+  renderPanel();
+  if (S.view === "games") renderGames(); else renderItems();
+}
+
+// ---------------------------------------------------------------- data
+async function apiError(r) {
+  try { const b = await r.json(); return b.detail || b.error || `HTTP ${r.status}`; } catch (e) { return `HTTP ${r.status}`; }
+}
+async function loadCatalog() {
+  const r = await fetch("/api/catalog", { cache: "no-store" });
+  if (!r.ok) throw new Error(await apiError(r));
+  S.cat = await r.json();
+  S.etag = r.headers.get("ETag");
+  S.ix = index(S.cat);
+  stMap = null;
+  if (!S.cat.persons.some((p) => p.id === S.person)) S.person = S.cat.persons.length ? S.cat.persons[0].id : null;
+}
+function applyLocal(person, work, status) {
+  const ps = S.cat.play_state;
+  const i = ps.findIndex((s) => s.person === person && s.work === work);
+  if (status === "") { if (i >= 0) ps.splice(i, 1); }
+  else if (i >= 0) ps[i].status = status;
+  else ps.push({ person, work, status, note: null, updated_at: Math.floor(Date.now() / 1000) });
+  const key = String(person);
+  const order = (S.cat.up_next[key] || []).filter((w) => w !== work);
+  if (status === "up_next") order.push(work);
+  S.cat.up_next[key] = order;
+  stMap = null;
+}
+// Saves run one at a time. A stale ETag (someone else changed the catalog) refetches and retries once.
+function saveStatus(work, status) {
+  const person = S.person, key = `${person}:${work}`;
+  const mine = { status };
+  S.pending.set(key, mine);
+  S.rowErr = null;
+  S.queue = S.queue.then(async () => {
+    let msg = null;
+    try {
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const headers = { "Content-Type": "application/json" };
+        if (S.etag) headers["If-Match"] = S.etag;
+        const r = await fetch("/api/play-state", { method: "PUT", headers, body: JSON.stringify({ person, work, status }) });
+        if (r.status === 412 && attempt === 0) { await loadCatalog(); continue; }
+        if (!r.ok) { msg = await apiError(r); break; }
+        S.etag = r.headers.get("ETag") || S.etag;
+        applyLocal(person, work, status);
+        break;
+      }
+    } catch (e) {
+      msg = "Couldn't reach the server. The status was not saved.";
+    }
+    if (S.pending.get(key) === mine) S.pending.delete(key);  // a later edit of the same row keeps its marker
+    if (msg) S.rowErr = { work, msg };
+    render();
+  });
+}
+
+function setView(v) { S.view = v; render(); }
+function viewFromPath() { return VIEWS[location.pathname.replace(/\/+$/, "") || "/"] || "games"; }
+function setFilters(f) { S.f = clean(f); writeHash(); render(); }
+
+// ---------------------------------------------------------------- interactions
+let qTimer;
+$("q").addEventListener("input", (e) => { clearTimeout(qTimer); qTimer = setTimeout(() => setFilters({ ...S.f, q: e.target.value }), 150); });
+$("clearBtn").addEventListener("click", () => setFilters({}));
+$("filtersBtn").addEventListener("click", () => {
+  const open = $("filtersBtn").getAttribute("aria-expanded") !== "true";
+  $("filtersBtn").setAttribute("aria-expanded", String(open));
+  $("fbody").hidden = !open;
+});
+$("person").addEventListener("change", (e) => {
+  S.person = Number(e.target.value);
+  store.set("ps-person", String(S.person));
+  S.rowErr = null;
+  render();
+});
+document.querySelector(".tabs").addEventListener("click", (e) => {
+  const a = e.target.closest("a[data-view]");
+  if (!a || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+  e.preventDefault();
+  const path = a.getAttribute("href").split("#")[0];
+  if (path !== location.pathname) history.pushState(null, "", path + hashString());
+  setView(a.dataset.view);
+});
+// Platform ids are validated against the catalog, so the URL is only read once it has loaded.
+window.addEventListener("popstate", () => { if (!S.cat) return; S.f = loadInitialFilters(); setView(viewFromPath()); });
+window.addEventListener("hashchange", () => { if (!S.cat) return; S.f = loadInitialFilters(); writeHash(); render(); });
+document.addEventListener("click", (e) => {
+  const t = e.target.closest("button");
+  if (!t) return;
+  if (t.dataset.clear !== undefined) { setFilters({}); return; }
+  if (t.dataset.fa !== undefined) {
+    const k = t.dataset.fa, v = t.dataset.fv;
+    const cur = S.f[k].map(String);
+    const next = cur.includes(v) ? cur.filter((x) => x !== v) : [...cur, v];
+    setFilters({ ...S.f, [k]: next });
+    return;
+  }
+  if (t.dataset.fo !== undefined) {
+    const k = t.dataset.fo, v = t.dataset.fv;
+    setFilters({ ...S.f, [k]: S.f[k] === v ? "" : v });
+  }
+});
+document.addEventListener("change", (e) => {
+  const t = e.target;
+  if (t.matches("select.status[data-work]")) {
+    t.dataset.saved = "0";
+    saveStatus(Number(t.dataset.work), t.value);
+    return;
+  }
+  if (t.dataset.fb !== undefined) { setFilters({ ...S.f, [t.dataset.fb]: t.checked }); return; }
+  if (t.dataset.fs !== undefined) setFilters({ ...S.f, [t.dataset.fs]: t.value });
+});
+document.addEventListener("input", (e) => {
+  if (e.target.dataset && e.target.dataset.ps === "pub") { S.pickQ = e.target.value.slice(0, 120); $("opts-pub").innerHTML = pubOptions(); }
+});
+
+// ---------------------------------------------------------------- start
+// The page is a body fragment; an icon link only counts in <head> (else the browser asks for /favicon.ico).
+document.head.appendChild($("favicon"));
+(function navLinks() {
+  // Absolute http(s) or a path on this host; anything else (javascript:, data:) is dropped.
+  const nav = ((window.APP_CONFIG || {}).nav || []).filter((n) => n && n.label && /^(https?:\/\/|\/(?!\/))/i.test(n.url || ""));
+  $("navlinks").innerHTML = nav.map((n) => `<a href="${esc(n.url)}">${esc(n.label)}</a>`).join("");
+  $("navlinks").hidden = nav.length === 0;
+})();
+S.view = viewFromPath();
+const saved = Number(store.get("ps-person"));
+S.person = Number.isInteger(saved) && saved > 0 ? saved : null;
+loadCatalog().then(() => {
+  S.f = loadInitialFilters();
+  writeHash();
+  render();
+}).catch((e) => {
+  $("loadErr").textContent = `Couldn't load the catalog: ${e.message}. Reload the page to try again.`;
+  $("loadErr").hidden = false;
+}).finally(() => { document.documentElement.dataset.ready = S.cat ? "1" : "error"; });
+})();
+</script>
