@@ -11,8 +11,8 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from ps.gameeye_ged import GedError, GedFile, read_ged
-from ps.idmaps import CATEGORY_CODE, UNMAPPED, IdMaps, condition_label
-from ps.titles import normalize
+from ps.idmaps import CATEGORY_CODE, UNMAPPED, IdMaps, condition_label, ensure_platform
+from ps.titles import display_title, normalize
 
 MAX_UPLOAD = 32 * 1024 * 1024
 STAGE_TTL = 3600
@@ -252,3 +252,98 @@ def stage(store, maps: IdMaps, imports_dir: Path, ged: bytes, csv: bytes | None,
             "warnings": warnings,
             "changes": [{k: c[k] for k in ("op", "source_id", "title", "platform", "condition")}
                         for c in changes]}
+
+
+# ---- apply (spec 5.4, 6.2) ---------------------------------------------------------------
+
+def attach_work(conn: sqlite3.Connection, raw_title: str) -> int:
+    """Return the work for a raw title: alias lookup, else create the work and its alias."""
+    key = normalize(raw_title)[0]
+    row = conn.execute("SELECT work_id FROM work_alias WHERE work_key=?", (key,)).fetchone()
+    if row:
+        return row[0]
+    wid = conn.execute("INSERT INTO work (title) VALUES (?)", (display_title(raw_title),)).lastrowid
+    conn.execute("INSERT INTO work_alias (work_key, work_id) VALUES (?, ?)", (key, wid))
+    return wid
+
+
+_NAMES = {"add": "added", "edit": "edited", "remove": "removed", "restore": "restored"}
+
+
+def _apply_change(conn, c: dict, plat: int | None, now: int) -> None:
+    m, sid = c["after"], c["source_id"]
+    if c["op"] == "remove":
+        conn.execute("UPDATE copy SET removed_at=? WHERE source='gameeye' AND source_id=?",
+                     (now, sid))
+        return
+    work = attach_work(conn, m.raw_title) if m.category == "game" else None
+    if c["op"] == "add":
+        conn.execute(
+            "INSERT INTO copy (work_id, platform_id, category, form, account_id, raw_title, edition,"
+            " condition_mask, country, source, source_id, source_item_id, source_platform_id,"
+            " created_at, updated_at) VALUES (?, ?, ?, 'physical', NULL, ?, ?, ?, ?, 'gameeye', ?,"
+            " ?, ?, ?, ?)",
+            (work, plat, m.category, m.raw_title, m.edition, m.condition_mask, m.country, sid,
+             m.source_item_id, m.gameeye_platform_id, m.created_at, m.updated_at))
+        return
+    cur = conn.execute("SELECT work_id, work_pinned FROM copy WHERE source='gameeye' AND "
+                       "source_id=?", (sid,)).fetchone()
+    if m.category != "game":
+        wid, pinned = None, 0
+    elif cur["work_pinned"] and cur["work_id"] is not None:
+        wid, pinned = cur["work_id"], 1
+    else:
+        wid, pinned = work, 0
+    conn.execute(
+        "UPDATE copy SET work_id=?, work_pinned=?, platform_id=?, category=?, raw_title=?,"
+        " edition=?, condition_mask=?, country=?, source_item_id=?, source_platform_id=?,"
+        " updated_at=?, removed_at=NULL, removed_reason=NULL"
+        " WHERE source='gameeye' AND source_id=?",
+        (wid, pinned, plat, m.category, m.raw_title, m.edition, m.condition_mask, m.country,
+         m.source_item_id, m.gameeye_platform_id, m.updated_at, sid))
+
+
+def apply(store, maps: IdMaps, imports_dir: Path, run_id: int, *, confirm_removals: bool,
+          now: int) -> dict:
+    imports_dir = Path(imports_dir)
+    with store.write() as conn:       # own transaction: a 410 must not roll the expiry back
+        if imports_dir.is_dir():
+            expire(conn, imports_dir, now=now)
+    with store.write() as conn:
+        run = conn.execute("SELECT * FROM import_run WHERE id=? AND source='gameeye'",
+                           (run_id,)).fetchone()
+        if run is None:
+            raise ImportFailure(404, "not_found", f"no import run {run_id}")
+        if run["status"] == "expired":
+            raise ImportFailure(410, "expired", "staged import expired; upload again")
+        if run["status"] != "staged":
+            raise ImportFailure(409, "not_staged", f"import run is {run['status']}")
+        base = _latest_applied(conn)
+        if (base["id"] if base else None) != run["base_run_id"]:
+            raise ImportFailure(409, "stale_base", "another import was applied since staging")
+        path = imports_dir / f"{run['file_sha256']}.ged"
+        if not path.is_file():
+            raise ImportFailure(410, "expired", "staged file is gone; upload again")
+        if json.loads(run["summary_json"]).get("removal_guard") and confirm_removals is not True:
+            raise ImportFailure(428, "confirm_removals",
+                                "this import removes over 25% of active copies; confirm to proceed")
+        mapped, _warnings, skipped = _map_rows(_read_staged(path, imports_dir), maps)
+        changes = _diff(conn, mapped, skipped)
+        plats = {m.gameeye_platform_id: ensure_platform(conn, m.gameeye_platform_id, maps)[0]
+                 for m in mapped}
+        counts = {v: 0 for v in _NAMES.values()}
+        for c in changes:
+            counts[_NAMES[c["op"]]] += 1
+            _apply_change(conn, c, plats.get(c["after"].gameeye_platform_id if c["after"] else None),
+                          now)
+        conn.executemany("UPDATE copy SET last_seen_import=? WHERE source='gameeye' AND source_id=?",
+                         [(run_id, m.source_id) for m in mapped])
+        conn.execute("UPDATE import_run SET status='applied', applied_at=? WHERE id=?",
+                     (now, run_id))
+        summary = {**counts, "unchanged": len(mapped) - counts["added"] - counts["edited"]
+                   - counts["restored"], "skipped": len(skipped)}
+        live = _live_shas(conn)
+    for sha, ext in ((run["file_sha256"], "ged"), (run["csv_sha256"], "csv")):
+        if sha and sha not in live:
+            (imports_dir / f"{sha}.{ext}").unlink(missing_ok=True)
+    return {"import_id": run_id, "applied": True, "summary": summary}
