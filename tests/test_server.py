@@ -179,6 +179,28 @@ class TestBodies(ServerCase):
         self.assertIn(b" 400 ", out.split(b"\r\n")[0])
         out = raw_request(self.srv.port, head % b"Content-Length: -5\r\n")
         self.assertIn(b" 400 ", out.split(b"\r\n")[0])
+        # U+00B2 SUPERSCRIPT TWO: str.isdigit() says yes, int() says no (latin-1, as http.server decodes it)
+        out = raw_request(self.srv.port, head % "Content-Length: ²\r\n".encode("latin-1"))
+        self.assertIn(b" 400 ", out.split(b"\r\n")[0])
+        self.assertIn(b'"bad_request"', out)
+
+    def test_ids_beyond_int64(self):
+        big, neg = 2 ** 63, -(2 ** 63) - 1
+        cases = [("PUT", "/api/play-state", {"person": big, "work": 1, "status": "playing"}),
+                 ("PUT", "/api/play-state", {"person": 1, "work": neg, "status": "playing"}),
+                 ("PUT", "/api/up-next", {"person": big, "order": []}),
+                 ("PUT", "/api/up-next", {"person": 1, "order": [big]}),
+                 ("POST", "/api/work/merge", {"into": big, "from": 1}),
+                 ("POST", "/api/work/split", {"copy": big, "title": "x"}),
+                 ("POST", "/api/dup-ack", {"work": 1, "platform": big})]
+        for method, path, body in cases:
+            with self.subTest(path=path, body=body):
+                self.assert_error(self.srv.req(method, path, body), 400, "bad_request")
+        for path in (f"/api/copy/{big}", "/api/copy/" + "9" * 40):
+            with self.subTest(path=path):
+                self.assert_error(self.srv.put(path, {"removed_reason": "sold"}), 404, "not_found")
+        self.assert_error(self.srv.post(f"/api/import/{big}/apply", {}), 404, "not_found")
+        self.assertNotIn("Traceback", self.srv.log_text())
 
     def test_too_large_413(self):
         big = json.dumps({"note": "x" * (64 * 1024)}).encode()

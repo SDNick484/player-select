@@ -21,8 +21,15 @@ class CatalogError(Exception):
         self.status, self.code, self.detail = status, code, detail
 
 
-def _is_int(v) -> bool:
-    return isinstance(v, int) and not isinstance(v, bool)
+INT64_MIN, INT64_MAX = -(2 ** 63), 2 ** 63 - 1
+
+
+def is_int(v) -> bool:
+    """A JSON integer SQLite can bind (signed 64-bit); larger ones are malformed input, not a 500."""
+    return isinstance(v, int) and not isinstance(v, bool) and INT64_MIN <= v <= INT64_MAX
+
+
+_is_int = is_int
 
 
 def seed_persons(conn: sqlite3.Connection, persons: list[dict]) -> list[str]:
