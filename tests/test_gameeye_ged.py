@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import struct
 import sys
 import tempfile
 import unittest
@@ -56,6 +57,23 @@ class GedReaderTest(unittest.TestCase):
 
     def test_declared_too_large(self):
         self.assertEqual(self.code(build_ged(FIXTURE_ROWS), max_bytes=100), "too_large")
+
+    def test_understated_header_is_rejected(self):
+        real = b"x" * 5000
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+            z.writestr("ownership_database.db", real)
+        data = bytearray(buf.getvalue())
+        # patch uncompressed size (local header @22, central directory @24) down to 10
+        lh = data.index(b"PK\x03\x04")
+        cd = data.index(b"PK\x01\x02")
+        struct.pack_into("<I", data, lh + 22, 10)
+        struct.pack_into("<I", data, cd + 24, 10)
+        with self.assertRaises(GedError):
+            self.read(bytes(data), max_bytes=100)
+        for f in self.work.rglob("*"):
+            if f.is_file():
+                self.assertLessEqual(f.stat().st_size, 100)
 
     def test_copy_capped_stops_at_limit(self):
         with self.assertRaises(GedError) as cm:
