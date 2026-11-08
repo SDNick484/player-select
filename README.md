@@ -158,7 +158,7 @@ Every response carries `X-PlayerSelect-Server: 1` and `X-PlayerSelect-Api: 1`. R
 
 **Requests.** Every POST and PUT except the import upload needs `Content-Type: application/json` (415 otherwise) and a body of at most 64 KiB (413). A note is at most 2,000 characters.
 
-**ETags.** `GET /api/catalog` sends an `ETag`. `PUT /api/play-state` may send `If-Match` with an ETag from an earlier GET; if the catalog has changed since, the server answers `412` with `precondition_failed` and writes nothing. Without `If-Match` a PUT always works, which is how the page uses it.
+**ETags.** `GET /api/catalog` sends an `ETag`. `PUT /api/play-state` may send `If-Match` with an ETag from an earlier GET; if the catalog has changed since, the server answers `412` with `precondition_failed` and writes nothing. A PUT without `If-Match` always applies. The page sends `If-Match` with the last catalog ETag on every play-state PUT and, on a `412`, reloads the catalog and retries once.
 
 **Errors.** Every 4xx and 5xx body is JSON, including the ones the standard library produces:
 
