@@ -1,11 +1,15 @@
 """Synthetic GameEye backup builder shared by tests (no real data)."""
 from __future__ import annotations
 
+import datetime
 import io
 import sqlite3
 import tempfile
 import zipfile
 from pathlib import Path
+
+from ps.gameeye_csv import CSV_COLUMNS
+from ps.idmaps import load as _load_maps
 
 OWNERSHIP_COLUMNS = ("uuid", "item_id", "platform_id", "category_id", "title", "ownership_mask",
                      "country_id", "created_at", "updated_at", "purchase_price")
@@ -68,3 +72,63 @@ def build_ged(rows, *, user_version: int = 20, member: str = "ownership_database
         for name in extra_members:
             z.writestr(name, b"extra")
     return buf.getvalue()
+
+
+_CSV_DEFAULTS = {"Platform": "Sony PlayStation 4", "Category": "Games", "UserRecordType": "Collection",
+                 "Title": "Test Game", "Country": "United States of America",
+                 "ReleaseType": "Regular", "CreatedAt": "Nov 8, 2026", "Ownership": "CIB"}
+
+
+def csv_row(**kw) -> dict:
+    unknown = set(kw) - set(CSV_COLUMNS)
+    if unknown:
+        raise TypeError(f"unknown column(s): {sorted(unknown)}")
+    return {c: kw.get(c, _CSV_DEFAULTS.get(c, "")) for c in CSV_COLUMNS}
+
+
+def _csv_date(ts: int) -> str:
+    d = datetime.datetime.fromtimestamp(ts, datetime.timezone.utc)
+    return f"{d:%b} {d.day}, {d.year}"
+
+
+def fixture_csv_rows() -> list[dict]:
+    """One CSV row for each FIXTURE_ROWS uuid 01-06, labels taken from the real ID maps."""
+    maps = _load_maps()
+    extra = {
+        1: dict(Publisher="Test Publisher A", Developer="Test Studio A", Genre="Action, Adventure",
+                metacritic="92", PriceLoose="10.00", PriceCIB="24.99", PriceNew="59.99"),
+        2: dict(Publisher="Test Publisher A", Developer="Test Studio A", Genre="Action, Adventure",
+                metacritic="92", PriceLoose="10.00", PriceCIB="27.50", PriceNew="59.99"),
+        3: dict(Publisher="Test Publisher B", Developer="Test Studio B", Genre="Action",
+                metacritic="?", PriceLoose="4.00", PriceCIB="9.00", PriceNew="Missing Field"),
+        4: dict(Publisher="Test Publisher B", Developer="Test Studio B", Genre="Action",
+                metacritic="?", PriceLoose="4.00", PriceCIB="9.00", PriceNew="Missing Field"),
+        5: dict(Publisher="Test Publisher C", Developer="Test Studio C", Genre="Platformer",
+                metacritic="88", PriceLoose="-1.0", PriceCIB="45.00", PriceNew="0.0"),
+        6: dict(Publisher="Test Publisher C", Developer="Test Studio C", Genre="",
+                metacritic="", PriceLoose="", PriceCIB="", PriceNew="399.99"),
+    }
+    out = []
+    for n, r in enumerate(FIXTURE_ROWS[:6], start=1):
+        out.append(csv_row(
+            Platform=maps.platforms[r["platform_id"]], Category=maps.categories[r["category_id"]],
+            Ownership=maps.ownership[r["ownership_mask"]], Title=r["title"],
+            CreatedAt=_csv_date(r["created_at"]), **extra[n]))
+    return out
+
+
+def _q(v: str) -> str:
+    return v if v == "?" else '"' + v.replace('"', '""') + '"'
+
+
+def build_csv(rows, *, trailing_comma: bool = True, last_line_trailing: bool = True,
+              leading_space: bool = False) -> bytes:
+    sep = ", " if leading_space else ","
+    lines = [",".join(CSV_COLUMNS)]
+    for i, row in enumerate(rows):
+        line = sep.join(_q(row[c]) for c in CSV_COLUMNS)
+        last = i == len(rows) - 1
+        if trailing_comma and (last_line_trailing or not last):
+            line += ","
+        lines.append(line)
+    return ("\r\n".join(lines) + "\r\n").encode("utf-8")
