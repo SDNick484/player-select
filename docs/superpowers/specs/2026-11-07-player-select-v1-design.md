@@ -3,15 +3,14 @@
 - **Date:** 2026-11-07
 - **Status:** design agreed in brainstorming; awaiting review of this written spec
 - **Repo:** `SDNick484/player-select` (public, MIT)
-- **Host:** Alpine LXC on Proxmox (same container as steam-backlog-triage), `games.nickandrade.com` via Cloudflare Tunnel + Access
+- **Host:** Alpine LXC on Proxmox (same container as steam-backlog-triage), `games.<your-domain>` via Cloudflare Tunnel + Access
 - **Sibling:** [`SDNick484/steam-backlog-triage`](https://github.com/SDNick484/steam-backlog-triage) (read at commit `114368a`), referred to below as **SBT**
 
 ## 1. Purpose
 
 Player Select is a self-hosted catalog of the household's console games: physical copies from the
 GameEye app now, digital copies from PlayStation, Xbox and Nintendo later. It answers "what do we own,
-on what, in what form" and records per-person play state for five people (Nick, Lauren, Margaret,
-Alice, Paige).
+on what, in what form" and records per-person play state for five household members.
 
 ### v1 delivers
 
@@ -37,9 +36,9 @@ Alice, Paige).
 
 ## 2. Users and access
 
-- **Only Nick uses the UI.** He records state for any family member through a person picker.
+- **Only the owner uses the UI.** The owner records state for any family member through a person picker.
 - No authentication in the app. Access control is at the edge: Cloudflare Access for
-  `games.nickandrade.com`, or LAN / Tailscale. Same model and README warning as SBT.
+  `games.<your-domain>`, or LAN / Tailscale. Same model and README warning as SBT.
 - The person picker's current value is stored in the browser's `localStorage` (wrapped in
   try/catch); it defaults to the first person.
 
@@ -436,7 +435,7 @@ Not implemented in v1; documented in `adapters/README.md` so the schema is check
 - It writes `data/snapshots/<source>-<account>.json`:
 
 ```json
-{"schema": 1, "source": "psn", "account": {"external_id": "…", "label": "Nick PSN"},
+{"schema": 1, "source": "psn", "account": {"external_id": "…", "label": "Owner PSN"},
  "fetched_at": "2026-11-20T04:15:00Z",
  "items": [{"source_id": "…", "title": "…", "platform": "Sony PlayStation 5",
             "form": "digital", "hours": 12.5, "last_played": "2026-11-18T21:03:00Z"}]}
@@ -476,8 +475,8 @@ one sanitized fixture that passes the privacy scan.
 
 | Spike | Time | First | Then |
 |---|---|---|---|
-| PSN | 3 h | PSNAWP entitlements with Nick's NPSSO; compare count with the PS5 library; inspect a known PS Plus claim | psn-api for comparison; refresh-token lifetime |
-| Xbox | 3 h | OpenXBL title history for one daughter's account; look for an owned/collections call | whether one login reads the other accounts |
+| PSN | 3 h | PSNAWP entitlements with the owner's NPSSO; compare count with the PS5 library; inspect a known PS Plus claim | psn-api for comparison; refresh-token lifetime |
+| Xbox | 3 h | OpenXBL title history for one child's account; look for an owned/collections call | whether one login reads the other accounts |
 | Nintendo | 2 h | pynintendoparental per-player titles and minutes on the Switch 2 | eShop purchase history: export, signed-in-browser scrape, or manual |
 | Write-up | 1 h | fill the matrix; recommend the first adapter | |
 
@@ -530,8 +529,8 @@ tracked file containing GameEye's CSV header line, outside `tests/fixtures/` syn
 - Nightly backup cron block (default `30 3 * * *`):
   `sqlite3 player_select.db ".backup backups/player_select-$(date +%F).db"` and delete copies older
   than 14 days.
-- Cloudflare Tunnel: `games.nickandrade.com → http://localhost:8486`, behind the same Access policy
-  as `steam.nickandrade.com`.
+- Cloudflare Tunnel: `games.<your-domain> → http://localhost:8486`, behind the same Access policy
+  as `steam.<your-domain>`.
 - `.gitignore`: `data/`, `*.ged`, `*.db`, `*.db-*`, `*_collection.csv`, `.env`,
   `.player-select-env`, `persons.json`, plus SBT's Python entries.
 
