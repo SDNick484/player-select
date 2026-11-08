@@ -225,6 +225,19 @@ check "the service still comes up healthy after the third run" service_healthy
 # ================================================================== refusals
 printf '\n--- refusals\n'
 if env 'NAV=bad nav' sh "$SRC/install/alpine.sh" >/dev/null 2>&1; then bad "NAV with a space is refused"; else ok "NAV with a space is refused"; fi
+# A mistyped time zone is refused before anything is changed: /etc/localtime, the saved options, packages.
+cp -P /etc/localtime "$STUBS/localtime.before"
+cp "$SAVED" "$STUBS/saved.before"
+calls_before=$(wc -l < "$CALLS")
+if env TZ_NAME=No/Such_Zone sh "$SRC/install/alpine.sh" > "$STUBS/out.badtz" 2>&1; then
+  bad "a TZ_NAME with no zone file is refused"
+else
+  ok "a TZ_NAME with no zone file is refused"
+fi
+check "the refusal names the zone" grep -q "No/Such_Zone" "$STUBS/out.badtz"
+check "the refusal leaves /etc/localtime in place" cmp -s /etc/localtime "$STUBS/localtime.before"
+check "the refusal leaves the saved options alone" cmp -s "$SAVED" "$STUBS/saved.before"
+check "the refusal runs no system command" test "$(wc -l < "$CALLS")" = "$calls_before"
 
 echo
 if [ "$fail" = 0 ]; then echo "installer checks passed"; else echo "installer checks FAILED" >&2; fi

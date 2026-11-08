@@ -35,13 +35,20 @@ say() { printf '\n==> %s\n' "$*"; }
 [ "$(id -u)" = 0 ] || { echo "Run as root."; exit 1; }
 [ -f /etc/alpine-release ] || { echo "This installer is for Alpine Linux. See the README for other systems."; exit 1; }
 case "$NAV" in *[[:space:]\'\"]*) echo "NAV must not contain spaces or quotes."; exit 1;; esac
+bad_tz() { echo "TZ_NAME=$TZ_NAME: no such time zone (no /usr/share/zoneinfo/$TZ_NAME). $1"; exit 1; }
+# Checked before anything changes. Without tzdata yet (a minimal image) it is checked again once apk has installed
+# it, still before /etc/localtime is touched.
+if [ -n "$TZ_NAME" ] && [ -d /usr/share/zoneinfo ] && [ ! -f "/usr/share/zoneinfo/$TZ_NAME" ]; then
+  bad_tz "Nothing was changed."
+fi
 
 say "Installing packages"
 apk add --no-cache python3 tzdata ca-certificates sqlite >/dev/null </dev/null
 
 if [ -n "$TZ_NAME" ]; then
+  [ -f "/usr/share/zoneinfo/$TZ_NAME" ] || bad_tz "Only the packages were installed."
   say "Setting time zone to $TZ_NAME"
-  rm -f /etc/localtime
+  rm -f /etc/localtime   # it may be a symlink into zoneinfo: cp would write through it
   cp "/usr/share/zoneinfo/$TZ_NAME" /etc/localtime
   echo "$TZ_NAME" > /etc/timezone
 fi
