@@ -2,7 +2,7 @@
 
 - **Date:** 2026-11-07
 - **Status:** approved and implemented in v1 (PRs #1–#6, merged 2026-11-08); amended 2026-11-08
-  (persons seeding, retitles); the spike plan (section 9) has not run yet
+  (persons seeding, retitles; spike question 7 on images); the spike plan (section 9) has not run yet
 - **Repo:** `SDNick484/player-select` (public, MIT)
 - **Host:** Alpine LXC on Proxmox (same container as steam-backlog-triage), `games.<your-domain>` via Cloudflare Tunnel + Access
 - **Sibling:** [`SDNick484/steam-backlog-triage`](https://github.com/SDNick484/steam-backlog-triage) (read at commit `114368a`), referred to below as **SBT**
@@ -474,6 +474,9 @@ one sanitized fixture that passes the privacy scan.
 4. Play history: per-title hours and last played?
 5. Multiple accounts: can one setup read every household account?
 6. Auth durability: unattended token lifetime and refresh.
+7. Images (added 2026-11-08): which image fields come back per title (icon, tile, box art, hero), at what size,
+   and whether the URLs are stable. Input to a later cover-art source for digital-only works; not a v1.1
+   dependency (art spec A9).
 
 **Starting hypotheses (public docs as of 2026-11-07, unverified against these accounts).**
 
@@ -517,7 +520,7 @@ What it changes for the spikes:
 | Write-up | 1 h | fill the matrix; recommend the first adapter | |
 
 **Decision matrix** (one row per source): owned library, platforms covered, purchase vs claim, hours,
-all accounts, unattended auth, Python-native.
+all accounts, unattended auth, Python-native, images (question 7).
 
 **Pick rule.** First adapter = a source with an owned-library answer for the accounts the family
 actually plays on, tie-broken by unattended auth, then Python-native. If no source has an owned
